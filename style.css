@@ -808,7 +808,7 @@ nav {
 
 /* Hero Banner */
 .hero {
-  height: 30dvh;
+  height: 30vh;
   background: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.3)),
     url("./M&T.png") center/contain no-repeat;
   position: relative;
