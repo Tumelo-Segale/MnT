@@ -1061,7 +1061,7 @@ nav {
 .profile-actions {
   display: flex;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 12px;
 }
 
 .profile-actions .edit-btn {
@@ -1076,7 +1076,7 @@ nav {
 }
 
 .profile-actions .delete-btn {
-  background: #dc3545;
+  background: #b22222;
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
@@ -1084,14 +1084,6 @@ nav {
   cursor: pointer;
   font-weight: 500;
   flex: 1;
-}
-
-.profile-actions .edit-btn:hover {
-  background: #218838;
-}
-
-.profile-actions .delete-btn:hover {
-  background: #c82333;
 }
 
 /* Login/Register Section */
@@ -1469,79 +1461,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #b22222;
-}
-
-/* Admin Specific Styles */
-.admin-form {
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-  border: 1px solid #b22222;
-  margin: 20px 0;
-}
-
-.admin-form h2 {
-  color: #333;
-  margin: 24px 0 16px 0;
-  font-size: 1.3rem;
-  text-transform: uppercase;
-}
-
-.admin-form h2:first-child {
-  margin-top: 0;
-}
-
-.yearly-stats {
-  margin: 30px 0;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 4px;
-  border: 1px solid #b22222;
-}
-
-.yearly-stats h2 {
-  color: #b22222;
-  margin-bottom: 20px;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.download-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 30px;
-}
-
-.download-btn {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 1rem;
-  transition: background 0.3s ease;
-}
-
-.reset-btn {
-  background: #b22222;
-  color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 1rem;
-  transition: background 0.3s ease;
-}
-
-.download-btn:hover {
-  background: #218838;
-}
-
-.reset-btn:hover {
   background: #b22222;
 }

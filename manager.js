@@ -69,13 +69,12 @@ const toast = document.getElementById('toast');
 // State
 let managerData = JSON.parse(localStorage.getItem('managerData')) || {
     email: 'manager@mnt.com',
-    password: 'manager123'
+    password: 'manager123',
+    name: 'Manager'
 };
 
 let items = JSON.parse(localStorage.getItem('managerItems')) || [];
-
 let messages = JSON.parse(localStorage.getItem('contactMessages')) || [];
-
 let currentOrders = [];
 let editingItemId = null;
 let currentAction = null;
@@ -151,7 +150,7 @@ function loadOrders() {
     });
 }
 
-// Update dashboard stats - FIXED VERSION
+// Update dashboard stats
 function updateDashboardStats() {
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -209,33 +208,22 @@ function updateDashboardStats() {
     ).length;
     
     const completedOrdersCard = document.getElementById('completedOrders');
-    if (completedOrdersCard) {
+    if (!completedOrdersCard) {
+        // Create completed orders card if it doesn't exist
+        const statsGrid = document.querySelector('.stats-grid');
+        if (statsGrid) {
+            const card = document.createElement('div');
+            card.className = 'stat-card';
+            card.id = 'completedOrdersCard';
+            card.innerHTML = `
+                <h3>Completed Orders</h3>
+                <div class="stat-number" id="completedOrders">${completedOrdersCount}</div>
+                <div class="stat-label">Total completed orders</div>
+            `;
+            statsGrid.appendChild(card);
+        }
+    } else {
         completedOrdersCard.textContent = completedOrdersCount;
-    }
-    
-    // Yearly stats - FIXED: Make sure we're using completed orders only
-    const currentYear = new Date().getFullYear();
-    const yearlyCompletedOrders = currentOrders.filter(order => 
-        order.status === 'completed' && 
-        order.timestamp && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
-    
-    const yearlyRevenue = yearlyCompletedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Update yearly stats in storage
-    yearlyStats[currentYear] = {
-        revenue: yearlyRevenue,
-        orders: yearlyCompletedOrders.length
-    };
-    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
-    
-    // Update yearly display if elements exist
-    if (document.getElementById('yearlyRevenue')) {
-        document.getElementById('yearlyRevenue').textContent = formatCurrency(yearlyRevenue);
-    }
-    if (document.getElementById('yearlyOrders')) {
-        document.getElementById('yearlyOrders').textContent = yearlyCompletedOrders.length;
     }
 }
 
@@ -334,7 +322,7 @@ function displayAllOrders(status = 'pending') {
     }
 }
 
-// Show order details modal - Manager cannot see PIN
+// Show order details modal
 function showOrderDetails(order) {
     currentOrderForDetails = order;
     const statusClass = getStatusClass(order.status || 'pending');
@@ -460,7 +448,7 @@ function verifyOrderPin() {
     currentOrderForPin = null;
 }
 
-// Update order status (prevent status regression)
+// Update order status
 function updateOrderStatus(orderId, newStatus) {
     const orderIndex = currentOrders.findIndex(o => o.id === orderId);
     if (orderIndex !== -1) {
@@ -507,7 +495,6 @@ function updateOrderStatus(orderId, newStatus) {
 
 // Update real-time orders for customers
 function updateRealTimeOrders() {
-    // This function ensures immediate updates for customers
     const event = new Event('ordersUpdated');
     window.dispatchEvent(event);
 }
@@ -656,7 +643,7 @@ function syncItemsToMainApp() {
         description: item.description || '',
         price: parseFloat(item.price),
         category: item.category,
-        active: item.available // Only available items appear in main app
+        active: item.available
     }));
     
     localStorage.setItem('menuItems', JSON.stringify(mainAppItems));
@@ -770,7 +757,6 @@ function saveManagerData(formData) {
     
     // Check if email is being changed
     if (newEmail) {
-        // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(newEmail)) {
             showToast('Please enter a valid email address', 'error');
@@ -812,7 +798,7 @@ function showConfirmModal(action, data, message) {
     confirmModal.classList.add('active');
 }
 
-// Handle confirmed action - Clear currentUser on logout
+// Handle confirmed action
 function handleConfirmedAction() {
     switch (currentAction) {
         case 'deleteItem':
@@ -897,141 +883,6 @@ function handleNavClick(e) {
     window.location.hash = targetId;
 }
 
-// Yearly stats
-let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {};
-let statsResetCheck = JSON.parse(localStorage.getItem('managerStatsResetCheck')) || {};
-
-// Check and reset yearly stats if new year
-function checkYearlyReset() {
-    const currentYear = new Date().getFullYear();
-    const lastResetYear = statsResetCheck.lastResetYear || currentYear;
-    
-    if (currentYear > lastResetYear) {
-        showResetConfirmation(currentYear, lastResetYear);
-    }
-}
-
-// Show reset confirmation
-function showResetConfirmation(currentYear, lastResetYear) {
-    confirmMessage.textContent = `New year detected (${currentYear}). Would you like to reset yearly statistics? This will clear all data for ${lastResetYear}.`;
-    confirmModal.classList.add('active');
-    
-    // Store reset info
-    localStorage.setItem('managerPendingYearReset', JSON.stringify({
-        currentYear: currentYear,
-        lastResetYear: lastResetYear
-    }));
-}
-
-// Reset yearly stats
-function resetYearlyStats() {
-    const resetInfo = JSON.parse(localStorage.getItem('managerPendingYearReset'));
-    if (!resetInfo) return;
-    
-    const { currentYear, lastResetYear } = resetInfo;
-    
-    // Archive old yearly stats
-    const archivedStats = JSON.parse(localStorage.getItem('managerArchivedStats')) || {};
-    archivedStats[lastResetYear] = yearlyStats[lastResetYear] || {};
-    localStorage.setItem('managerArchivedStats', JSON.stringify(archivedStats));
-    
-    // Reset current yearly stats
-    yearlyStats[currentYear] = {
-        revenue: 0,
-        orders: 0
-    };
-    
-    // Update reset check
-    statsResetCheck = {
-        lastResetYear: currentYear,
-        lastResetDate: new Date().toISOString()
-    };
-    
-    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
-    localStorage.setItem('managerStatsResetCheck', JSON.stringify(statsResetCheck));
-    localStorage.removeItem('managerPendingYearReset');
-    
-    showToast(`Yearly statistics reset for ${currentYear}`);
-    updateDashboardStats();
-}
-
-// Generate and download yearly statement
-function downloadYearlyStatement() {
-    const currentYear = new Date().getFullYear();
-    const completedOrdersList = currentOrders.filter(order => 
-        order.status === 'completed' &&
-        order.timestamp && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
-    
-    if (completedOrdersList.length === 0) {
-        showToast('No completed orders for the current year', 'error');
-        return;
-    }
-    
-    // Calculate yearly totals
-    const yearlyRevenue = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Create CSV content
-    let csvContent = "Yearly Statement\n\n";
-    csvContent += `Year: ${currentYear}\n`;
-    csvContent += `Total Completed Orders: ${completedOrdersList.length}\n`;
-    csvContent += `Total Revenue Generated: ${formatCurrency(yearlyRevenue)}\n\n`;
-    
-    csvContent += "Order Details:\n";
-    csvContent += "Date,Order ID,Order Amount\n";
-    
-    completedOrdersList.forEach(order => {
-        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
-        const orderAmount = order.total || 0;
-        
-        csvContent += `${date},${order.orderId || 'N/A'},${orderAmount.toFixed(2)}\n`;
-    });
-    
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", `M&T_Manager_Statement_${currentYear}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showToast('Yearly statement downloaded successfully');
-}
-
-// Add download button to dashboard in manager.html
-function addDownloadButtonToDashboard() {
-    const dashboardSection = document.getElementById('dashboard');
-    const existingDownloadSection = dashboardSection.querySelector('.download-section');
-    
-    if (!existingDownloadSection) {
-        const downloadSection = document.createElement('div');
-        downloadSection.className = 'download-section';
-        downloadSection.innerHTML = `
-            <button class="download-btn" id="downloadStatement">
-                Download Yearly Statement
-            </button>
-            <button class="reset-btn" id="resetStats">
-                Reset Yearly Stats
-            </button>
-        `;
-        
-        dashboardSection.querySelector('.section-content').appendChild(downloadSection);
-        
-        // Add event listeners
-        document.getElementById('downloadStatement')?.addEventListener('click', downloadYearlyStatement);
-        document.getElementById('resetStats')?.addEventListener('click', () => {
-            confirmMessage.textContent = 'Are you sure you want to reset yearly statistics? This will clear all data for the current year and cannot be undone.';
-            confirmModal.classList.add('active');
-        });
-    }
-}
-
 // Initialize
 function initialize() {
     // Load initial data
@@ -1039,9 +890,10 @@ function initialize() {
     
     // Create completed orders stat card if it doesn't exist
     const statsGrid = document.querySelector('.stats-grid');
-    if (statsGrid && !document.getElementById('completedOrders')) {
+    if (statsGrid && !document.getElementById('completedOrdersCard')) {
         const completedOrdersCard = document.createElement('div');
         completedOrdersCard.className = 'stat-card';
+        completedOrdersCard.id = 'completedOrdersCard';
         completedOrdersCard.innerHTML = `
             <h3>Completed Orders</h3>
             <div class="stat-number" id="completedOrders">0</div>
@@ -1049,12 +901,6 @@ function initialize() {
         `;
         statsGrid.appendChild(completedOrdersCard);
     }
-    
-    // Add download button to dashboard
-    addDownloadButtonToDashboard();
-    
-    // Check for yearly reset
-    checkYearlyReset();
     
     updateDashboardStats();
     displayAllOrders('pending');
@@ -1209,11 +1055,6 @@ closeConfirmModal?.addEventListener('click', () => {
 });
 cancelConfirm?.addEventListener('click', () => {
     confirmModal.classList.remove('active');
-    // Redirect to dashboard on cancel
-    const dashboardLink = document.querySelector('.nav-link[href="#dashboard"]');
-    if (dashboardLink) {
-        handleNavClick.call(dashboardLink, new Event('click'));
-    }
 });
 confirmAction?.addEventListener('click', handleConfirmedAction);
 
@@ -1239,13 +1080,10 @@ verifyPin?.addEventListener('click', verifyOrderPin);
 
 // PIN input validation
 pinInput?.addEventListener('input', (e) => {
-    // Only allow numbers
     e.target.value = e.target.value.replace(/\D/g, '');
-    // Limit to 6 digits
     if (e.target.value.length > 6) {
         e.target.value = e.target.value.slice(0, 6);
     }
-    // Hide error when typing
     pinError.style.display = 'none';
 });
 

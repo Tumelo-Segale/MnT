@@ -261,7 +261,7 @@ nav {
 }
 
 .stat-change.negative {
-  color: #b22222;
+  color: #dc3545;
 }
 
 .stat-label {
@@ -529,7 +529,7 @@ nav {
 }
 
 .delete-item-btn {
-  background: #b22222;
+  background: #dc3545;
   color: white;
 }
 
@@ -546,7 +546,7 @@ nav {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: #b22222;
+  background: #dc3545;
   color: white;
   padding: 2px 8px;
   border-radius: 4px;
@@ -848,7 +848,7 @@ nav {
 }
 
 .delete-btn {
-  background: #b22222;
+  background: #dc3545;
   color: white;
   border: none;
   padding: 12px;
@@ -857,6 +857,10 @@ nav {
   font-weight: 500;
   flex: 1;
   transition: background 0.3s ease;
+}
+
+.delete-btn:hover {
+  background: #c82333;
 }
 
 /* Order Details */
@@ -962,7 +966,7 @@ nav {
 }
 
 .pin-error {
-  color: #b22222;
+  color: #dc3545;
   text-align: center;
   margin-top: 8px;
   display: none;
@@ -1137,36 +1141,4 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #b22222;
-}
-
-/* Download Section Styles */
-.download-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 30px;
-}
-
-.download-btn {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 1rem;
-  transition: background 0.3s ease;
-}
-
-.reset-btn {
-  background: #b22222;
-  color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 1rem;
-  transition: background 0.3s ease;
 }
