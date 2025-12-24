@@ -1,3 +1,117 @@
+// Storage availability check and initialization
+(function() {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined') return;
+    
+    // Initialize storage if not available
+    if (typeof localStorage === 'undefined' || !window.localStorage) {
+        console.warn('localStorage is not available. Initializing fallback storage.');
+        window.localStorage = {
+            _data: {},
+            setItem: function(id, val) {
+                try {
+                    this._data[id] = String(val);
+                } catch (e) {
+                    console.error('Error setting localStorage item:', e);
+                }
+            },
+            getItem: function(id) {
+                return this._data.hasOwnProperty(id) ? this._data[id] : null;
+            },
+            removeItem: function(id) {
+                delete this._data[id];
+            },
+            clear: function() {
+                this._data = {};
+            },
+            key: function(index) {
+                const keys = Object.keys(this._data);
+                return index >= 0 && index < keys.length ? keys[index] : null;
+            },
+            get length() {
+                return Object.keys(this._data).length;
+            }
+        };
+    }
+    
+    // Initialize sessionStorage if not available
+    if (typeof sessionStorage === 'undefined' || !window.sessionStorage) {
+        console.warn('sessionStorage is not available. Initializing fallback storage.');
+        window.sessionStorage = {
+            _data: {},
+            setItem: function(id, val) {
+                try {
+                    this._data[id] = String(val);
+                } catch (e) {
+                    console.error('Error setting sessionStorage item:', e);
+                }
+            },
+            getItem: function(id) {
+                return this._data.hasOwnProperty(id) ? this._data[id] : null;
+            },
+            removeItem: function(id) {
+                delete this._data[id];
+            },
+            clear: function() {
+                this._data = {};
+            },
+            key: function(index) {
+                const keys = Object.keys(this._data);
+                return index >= 0 && index < keys.length ? keys[index] : null;
+            },
+            get length() {
+                return Object.keys(this._data).length;
+            }
+        };
+    }
+})();
+
+// Safe localStorage wrapper functions
+const safeStorage = {
+    getItem: function(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.error('Error getting from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setItem: function(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.error('Error setting to localStorage:', e);
+        }
+    },
+    
+    removeItem: function(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            console.error('Error removing from localStorage:', e);
+        }
+    },
+    
+    getJSON: function(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.error('Error parsing JSON from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setJSON: function(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error('Error stringifying JSON to localStorage:', e);
+        }
+    }
+};
+
 // Get DOM elements
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
@@ -70,15 +184,17 @@ const confirmDelete = document.getElementById('confirmDelete');
 // Toast element
 const toast = document.getElementById('toast');
 
-// State
-let cart = JSON.parse(localStorage.getItem('cart')) || [];
-let currentUser = JSON.parse(localStorage.getItem('currentUser')) || null;
-let orders = JSON.parse(localStorage.getItem('orders')) || [];
-let menuItems = JSON.parse(localStorage.getItem('menuItems')) || [];
-let contactMessages = JSON.parse(localStorage.getItem('contactMessages')) || [];
+// State - Using safeStorage wrapper
+let cart = safeStorage.getJSON('cart') || [];
+let currentUser = safeStorage.getJSON('currentUser') || null;
+let orders = safeStorage.getJSON('orders') || [];
+let menuItems = safeStorage.getJSON('menuItems') || [];
+let contactMessages = safeStorage.getJSON('contactMessages') || [];
 
 // Show toast message
 function showToast(message, type = 'success') {
+    if (!toast) return;
+    
     toast.textContent = message;
     toast.style.background = type === 'success' ? '#28a745' : '#dc3545';
     toast.style.display = 'block';
@@ -90,13 +206,20 @@ function showToast(message, type = 'success') {
 
 // Format date to DD MMM YYYY (e.g., 12 Nov 2025)
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    const day = date.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${day} ${month} ${year}`;
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'Invalid date';
+        
+        const day = date.getDate();
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = monthNames[date.getMonth()];
+        const year = date.getFullYear();
+        
+        return `${day} ${month} ${year}`;
+    } catch (e) {
+        console.error('Error formatting date:', e);
+        return 'Unknown date';
+    }
 }
 
 // Generate order ID: MNT(YYYYMMDD)-0000
@@ -117,6 +240,8 @@ function generatePin() {
 
 // Get status class based on status
 function getStatusClass(status) {
+    if (!status) return 'status-pending';
+    
     switch(status.toLowerCase()) {
         case 'pending':
             return 'status-pending';
@@ -126,6 +251,24 @@ function getStatusClass(status) {
             return 'status-complete';
         default:
             return 'status-pending';
+    }
+}
+
+// Check if within operating hours
+function isWithinOperatingHours() {
+    const now = new Date();
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const currentTime = hours + (minutes / 60);
+    
+    // Monday - Saturday: 09:00 - 20:00
+    // Sunday & Holidays: 10:00 - 19:00
+    
+    if (day === 0) { // Sunday
+        return currentTime >= 10 && currentTime < 19;
+    } else { // Monday - Saturday
+        return currentTime >= 9 && currentTime < 20;
     }
 }
 
@@ -141,7 +284,6 @@ function checkUserTypeAndRedirect() {
     
     // Check if user is admin
     if (currentUser.email === 'admin@admin.com' && currentUser.password === 'admin123') {
-        // For now, redirect to manager dashboard
         window.location.href = 'admin.html';
         return true;
     }
@@ -151,7 +293,7 @@ function checkUserTypeAndRedirect() {
 
 // Display orders in the orders section
 function displayOrders() {
-    const ordersContainer = document.getElementById('ordersContainer');
+    if (!ordersContainer) return;
     
     if (!currentUser) {
         ordersContainer.innerHTML = `
@@ -178,7 +320,11 @@ function displayOrders() {
     ordersContainer.innerHTML = '';
     
     // Sort orders by date (newest first)
-    userOrders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    userOrders.sort((a, b) => {
+        const dateA = a.timestamp ? new Date(a.timestamp) : new Date(0);
+        const dateB = b.timestamp ? new Date(b.timestamp) : new Date(0);
+        return dateB - dateA;
+    });
     
     userOrders.forEach(order => {
         const statusClass = getStatusClass(order.status);
@@ -187,12 +333,12 @@ function displayOrders() {
         orderElement.dataset.orderId = order.id;
         orderElement.innerHTML = `
             <div class="order-item-header">
-                <h4>${order.orderId}</h4>
+                <h4>${order.orderId || 'Unknown ID'}</h4>
                 <span class="order-date">${formatDate(order.timestamp)}</span>
             </div>
             <div class="order-item-body">
-                <p><strong>Status:</strong> <span class="order-status ${statusClass}">${order.status}</span></p>
-                <p><strong>Total:</strong> R ${order.total.toFixed(2)}</p>
+                <p><strong>Status:</strong> <span class="order-status ${statusClass}">${order.status || 'pending'}</span></p>
+                <p><strong>Total:</strong> R ${(order.total || 0).toFixed(2)}</p>
             </div>
             <button class="view-order-btn" data-order-id="${order.id}">View Details</button>
         `;
@@ -204,7 +350,7 @@ function displayOrders() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const orderId = btn.dataset.orderId;
-            const order = userOrders.find(o => o.id.toString() === orderId);
+            const order = userOrders.find(o => o.id && o.id.toString() === orderId);
             if (order) {
                 showOrderDetails(order);
             }
@@ -214,13 +360,15 @@ function displayOrders() {
 
 // Show order details in modal
 function showOrderDetails(order) {
+    if (!orderModalBody || !orderModal) return;
+    
     const statusClass = getStatusClass(order.status);
     
     orderModalBody.innerHTML = `
         <div class="order-details">
             <div class="order-detail-row">
                 <strong>Order ID:</strong>
-                <span>${order.orderId}</span>
+                <span>${order.orderId || 'Unknown ID'}</span>
             </div>
             <div class="order-detail-row">
                 <strong>Date:</strong>
@@ -228,24 +376,24 @@ function showOrderDetails(order) {
             </div>
             <div class="order-detail-row">
                 <strong>Status:</strong>
-                <span class="order-status ${statusClass}">${order.status}</span>
+                <span class="order-status ${statusClass}">${order.status || 'pending'}</span>
             </div>
             <div class="order-pin">
                 <div class="pin-label">Collection PIN:</div>
-                <div class="pin-code">${order.pin}</div>
+                <div class="pin-code">${order.pin || '000000'}</div>
             </div>
             <div class="order-items">
                 <h4>Items:</h4>
-                ${order.items.map(item => `
+                ${order.items && Array.isArray(order.items) ? order.items.map(item => `
                     <div class="order-item-detail">
-                        <span>${item.quantity}x ${item.name}</span>
-                        <span>R ${(item.price * item.quantity).toFixed(2)}</span>
+                        <span>${item.quantity || 1}x ${item.name || 'Unknown item'}</span>
+                        <span>R ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
                     </div>
-                `).join('')}
+                `).join('') : '<p>No items in this order</p>'}
             </div>
             <div class="order-total">
                 <strong>Total Amount:</strong>
-                <span>R ${order.total.toFixed(2)}</span>
+                <span>R ${(order.total || 0).toFixed(2)}</span>
             </div>
         </div>
     `;
@@ -255,14 +403,18 @@ function showOrderDetails(order) {
 
 // Close order modal
 function closeOrderModalFunc() {
-    orderModal.classList.remove('active');
+    if (orderModal) {
+        orderModal.classList.remove('active');
+    }
 }
 
 // Update contact form with user details (if logged in)
 function updateContactForm() {
+    if (!contactNameInput || !contactEmailInput) return;
+    
     if (currentUser) {
-        contactNameInput.value = currentUser.name;
-        contactEmailInput.value = currentUser.email;
+        contactNameInput.value = currentUser.name || '';
+        contactEmailInput.value = currentUser.email || '';
         contactNameInput.readOnly = true;
         contactEmailInput.readOnly = true;
         contactNameInput.style.backgroundColor = '#f5f5f5';
@@ -282,6 +434,8 @@ function displayMenuItems() {
     const mealsContainer = document.querySelector('.menu-category.meals');
     const drinksContainer = document.querySelector('.menu-category.drinks');
     
+    if (!mealsContainer || !drinksContainer) return;
+    
     // Clear existing items
     mealsContainer.innerHTML = '';
     drinksContainer.innerHTML = '';
@@ -300,9 +454,9 @@ function displayMenuItems() {
             menuItemElement.dataset.category = item.category;
             menuItemElement.dataset.price = item.price;
             menuItemElement.innerHTML = `
-                <h3>${item.name}</h3>
+                <h3>${item.name || 'Unknown Item'}</h3>
                 ${item.description ? `<p>${item.description}</p>` : ''}
-                <span class="price">R ${item.price.toFixed(2)}</span>
+                <span class="price">R ${(item.price || 0).toFixed(2)}</span>
                 <button class="add-to-cart">Add to Cart</button>
             `;
             mealsContainer.appendChild(menuItemElement);
@@ -320,9 +474,9 @@ function displayMenuItems() {
             menuItemElement.dataset.category = item.category;
             menuItemElement.dataset.price = item.price;
             menuItemElement.innerHTML = `
-                <h3>${item.name}</h3>
+                <h3>${item.name || 'Unknown Item'}</h3>
                 ${item.description ? `<p>${item.description}</p>` : ''}
-                <span class="price">R ${item.price.toFixed(2)}</span>
+                <span class="price">R ${(item.price || 0).toFixed(2)}</span>
                 <button class="add-to-cart">Add to Cart</button>
             `;
             drinksContainer.appendChild(menuItemElement);
@@ -332,10 +486,17 @@ function displayMenuItems() {
     // Add event listeners to new add to cart buttons
     document.querySelectorAll('.add-to-cart').forEach(btn => {
         btn.addEventListener('click', function(e) {
+            if (!isWithinOperatingHours()) {
+                showToast('Orders can only be placed during operating hours', 'error');
+                return;
+            }
+            
             const menuItem = this.closest('.menu-item');
-            const itemName = menuItem.querySelector('h3').textContent;
-            const price = menuItem.dataset.price;
-            const category = menuItem.dataset.category;
+            if (!menuItem) return;
+            
+            const itemName = menuItem.querySelector('h3')?.textContent || 'Unknown Item';
+            const price = menuItem.dataset.price || '0';
+            const category = menuItem.dataset.category || 'meals';
             
             addToCart(itemName, price, category);
             
@@ -438,6 +599,8 @@ function updateNavigation() {
 
 // Toggle sidebar function
 function toggleSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.toggle('active');
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
@@ -448,6 +611,8 @@ function toggleSidebar() {
 
 // Close sidebar function
 function closeSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.remove('active');
     sidebar.classList.remove('active');
     overlay.classList.remove('active');
@@ -484,7 +649,7 @@ function handleLogout(e) {
     
     // Clear current user
     currentUser = null;
-    localStorage.removeItem('currentUser');
+    safeStorage.removeItem('currentUser');
     
     // Clear cart
     cart = [];
@@ -499,6 +664,8 @@ function handleLogout(e) {
 
 // Show login/register form
 function showLoginForm() {
+    if (!formTitle || !formSubtitle || !loginForm || !registerForm) return;
+    
     formTitle.textContent = 'Login';
     formSubtitle.textContent = 'Access your M&T account to make online orders, view order history, and more.';
     loginForm.classList.add('active-form');
@@ -506,6 +673,8 @@ function showLoginForm() {
 }
 
 function showRegisterForm() {
+    if (!formTitle || !formSubtitle || !loginForm || !registerForm) return;
+    
     formTitle.textContent = 'Register';
     formSubtitle.textContent = 'Create your M&T account to make online orders and enjoy exclusive benefits.';
     loginForm.classList.remove('active-form');
@@ -514,44 +683,46 @@ function showRegisterForm() {
 
 // Update profile information
 function updateProfileInfo() {
-    if (currentUser) {
-        profileName.textContent = currentUser.name;
-        profileEmail.textContent = currentUser.email;
-        profilePhone.textContent = currentUser.phone;
-    }
+    if (!currentUser || !profileName || !profileEmail || !profilePhone) return;
+    
+    profileName.textContent = currentUser.name || '-';
+    profileEmail.textContent = currentUser.email || '-';
+    profilePhone.textContent = currentUser.phone || '-';
 }
 
 // Show edit profile modal
 function showEditProfileModal() {
-    if (!currentUser) return;
+    if (!currentUser || !profileEditModal) return;
     
-    editNameInput.value = currentUser.name;
-    editEmailInput.value = currentUser.email;
-    editPhoneInput.value = currentUser.phone;
+    if (editNameInput) editNameInput.value = currentUser.name || '';
+    if (editEmailInput) editEmailInput.value = currentUser.email || '';
+    if (editPhoneInput) editPhoneInput.value = currentUser.phone || '';
     
     // Clear password fields
-    currentPasswordInput.value = '';
-    newPasswordInput.value = '';
-    confirmPasswordInput.value = '';
+    if (currentPasswordInput) currentPasswordInput.value = '';
+    if (newPasswordInput) newPasswordInput.value = '';
+    if (confirmPasswordInput) confirmPasswordInput.value = '';
     
     profileEditModal.classList.add('active');
 }
 
 // Close edit profile modal
 function closeEditProfileModal() {
-    profileEditModal.classList.remove('active');
+    if (profileEditModal) {
+        profileEditModal.classList.remove('active');
+    }
 }
 
 // Save profile changes
 function saveProfileChanges() {
     if (!currentUser) return;
     
-    const name = editNameInput.value.trim();
-    const email = editEmailInput.value.trim();
-    const phone = editPhoneInput.value.trim();
-    const currentPassword = currentPasswordInput.value;
-    const newPassword = newPasswordInput.value;
-    const confirmPassword = confirmPasswordInput.value;
+    const name = editNameInput?.value.trim() || '';
+    const email = editEmailInput?.value.trim() || '';
+    const phone = editPhoneInput?.value.trim() || '';
+    const currentPassword = currentPasswordInput?.value || '';
+    const newPassword = newPasswordInput?.value || '';
+    const confirmPassword = confirmPasswordInput?.value || '';
     
     // Basic validation
     if (!name || !email || !phone) {
@@ -560,7 +731,7 @@ function saveProfileChanges() {
     }
     
     // Get users from storage
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const users = safeStorage.getJSON('users') || [];
     const userIndex = users.findIndex(u => u.email === currentUser.email);
     
     if (userIndex === -1) {
@@ -606,17 +777,17 @@ function saveProfileChanges() {
     users[userIndex].phone = phone;
     
     // Save updated users
-    localStorage.setItem('users', JSON.stringify(users));
+    safeStorage.setJSON('users', users);
     
     // Update current user
     currentUser = users[userIndex];
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    safeStorage.setJSON('currentUser', currentUser);
     
     // Update profile display
     updateProfileInfo();
     
     // Update contact form if email changed
-    if (contactEmailInput.value === currentUser.email) {
+    if (contactEmailInput && contactEmailInput.value === currentUser.email) {
         contactNameInput.value = currentUser.name;
         contactEmailInput.value = currentUser.email;
     }
@@ -627,27 +798,31 @@ function saveProfileChanges() {
 
 // Show delete confirmation modal
 function showDeleteConfirmModal() {
-    deleteConfirmModal.classList.add('active');
+    if (deleteConfirmModal) {
+        deleteConfirmModal.classList.add('active');
+    }
 }
 
 // Close delete confirmation modal
 function closeDeleteConfirmModal() {
-    deleteConfirmModal.classList.remove('active');
+    if (deleteConfirmModal) {
+        deleteConfirmModal.classList.remove('active');
+    }
 }
 
 // Delete user profile
 function deleteUserProfile() {
     if (!currentUser) return;
     
-    const users = JSON.parse(localStorage.getItem('users')) || [];
+    const users = safeStorage.getJSON('users') || [];
     const updatedUsers = users.filter(u => u.email !== currentUser.email);
     
     // Remove user from storage
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
+    safeStorage.setJSON('users', updatedUsers);
     
     // Clear current user
     currentUser = null;
-    localStorage.removeItem('currentUser');
+    safeStorage.removeItem('currentUser');
     
     // Clear user's cart
     cart = [];
@@ -700,7 +875,7 @@ function searchMenuItems(searchTerm) {
     let hasResults = false;
     
     items.forEach(item => {
-        const itemName = item.querySelector('h3').textContent.toLowerCase();
+        const itemName = item.querySelector('h3')?.textContent.toLowerCase() || '';
         const itemDesc = item.querySelector('p') ? item.querySelector('p').textContent.toLowerCase() : '';
         
         if (itemName.includes(searchTerm.toLowerCase()) || itemDesc.includes(searchTerm.toLowerCase())) {
@@ -748,6 +923,11 @@ function addToCart(itemName, price, category) {
         return;
     }
     
+    if (!isWithinOperatingHours()) {
+        showToast('Orders can only be placed during operating hours', 'error');
+        return;
+    }
+    
     const existingItem = cart.find(item => item.name === itemName);
     
     if (existingItem) {
@@ -755,7 +935,7 @@ function addToCart(itemName, price, category) {
     } else {
         cart.push({
             name: itemName,
-            price: parseFloat(price),
+            price: parseFloat(price) || 0,
             quantity: 1,
             category: category
         });
@@ -793,8 +973,10 @@ function updateItemQuantity(itemName, change) {
 }
 
 function updateCart() {
+    if (!cartCount || !cartItems || !totalAmount) return;
+    
     // Update cart count
-    const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
     cartCount.textContent = totalItems;
     
     // Update cart items display
@@ -808,12 +990,12 @@ function updateCart() {
             itemElement.className = 'cart-item';
             itemElement.innerHTML = `
                 <div class="cart-item-info">
-                    <h4>${item.name}</h4>
-                    <p>R ${item.price.toFixed(2)}</p>
+                    <h4>${item.name || 'Unknown Item'}</h4>
+                    <p>R ${(item.price || 0).toFixed(2)}</p>
                 </div>
                 <div class="cart-item-actions">
                     <button class="quantity-btn decrease" data-item="${item.name}">-</button>
-                    <span>${item.quantity}</span>
+                    <span>${item.quantity || 1}</span>
                     <button class="quantity-btn increase" data-item="${item.name}">+</button>
                     <button class="remove-item" data-item="${item.name}">&times;</button>
                 </div>
@@ -842,11 +1024,13 @@ function updateCart() {
     }
     
     // Update total amount
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const total = cart.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
     totalAmount.textContent = `R ${total.toFixed(2)}`;
 }
 
 function updateCartVisibility() {
+    if (!cartContainer || !cartModal) return;
+    
     if (cart.length > 0 && currentUser) {
         cartContainer.classList.add('visible');
     } else {
@@ -861,11 +1045,62 @@ function toggleCartModal() {
         setActiveSection('login');
         return;
     }
-    cartModal.classList.toggle('active');
+    
+    if (cartModal) {
+        cartModal.classList.toggle('active');
+    }
 }
 
 function saveCartToStorage() {
-    localStorage.setItem('cart', JSON.stringify(cart));
+    safeStorage.setJSON('cart', cart);
+}
+
+// Paystack integration
+function processPayment() {
+    const total = cart.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
+    
+    if (total <= 0) {
+        showToast('Cart total must be greater than zero', 'error');
+        return;
+    }
+    
+    // Convert to kobo (Paystack uses kobo)
+    const amountInKobo = Math.round(total * 100);
+    
+    const handler = PaystackPop.setup({
+        key: 'pk_test_328d06e1e7acac75cab1175db7c135a8f1697132',
+        email: currentUser.email || '',
+        amount: amountInKobo,
+        currency: 'ZAR',
+        ref: generateOrderId(),
+        callback: function(response) {
+            // Payment successful
+            saveOrder();
+            
+            // Show success message with PIN
+            const latestOrder = orders.find(order => order.userEmail === currentUser.email && order.timestamp > Date.now() - 1000);
+            if (latestOrder) {
+                showToast(`Payment successful! Order placed. Your PIN: ${latestOrder.pin || '000000'}. Order status: ${latestOrder.status || 'pending'}`);
+            } else {
+                showToast('Payment successful! Order placed.');
+            }
+            
+            // Clear cart
+            cart = [];
+            updateCart();
+            updateCartVisibility();
+            saveCartToStorage();
+            if (cartModal) cartModal.classList.remove('active');
+            
+            // Navigate to orders section
+            setActiveSection('orders');
+        },
+        onClose: function() {
+            showToast('Payment cancelled', 'error');
+        }
+    });
+    
+    handler.openIframe();
 }
 
 function saveOrder() {
@@ -876,19 +1111,23 @@ function saveOrder() {
         orderId: generateOrderId(),
         timestamp: new Date().toISOString(),
         items: [...cart],
-        total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        userEmail: currentUser.email,
+        total: cart.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0),
+        userEmail: currentUser.email || '',
         pin: generatePin(),
         status: 'pending'
     };
     
     orders.unshift(order);
-    localStorage.setItem('orders', JSON.stringify(orders));
+    safeStorage.setJSON('orders', orders);
     
     // Display updated orders
-    if (document.getElementById('orders').classList.contains('active')) {
+    if (document.getElementById('orders')?.classList.contains('active')) {
         displayOrders();
     }
+    
+    // Trigger real-time update for manager and admin
+    const event = new Event('ordersUpdated');
+    window.dispatchEvent(event);
 }
 
 // Save contact message
@@ -903,12 +1142,16 @@ function saveContactMessage(name, email, message) {
     };
     
     contactMessages.unshift(contactMessage);
-    localStorage.setItem('contactMessages', JSON.stringify(contactMessages));
+    safeStorage.setJSON('contactMessages', contactMessages);
+    
+    // Trigger real-time update for manager
+    const event = new Event('messagesUpdated');
+    window.dispatchEvent(event);
 }
 
 // Event listeners
-hamburgerBtn.addEventListener('click', toggleSidebar);
-overlay.addEventListener('click', closeSidebar);
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleSidebar);
+if (overlay) overlay.addEventListener('click', closeSidebar);
 
 // Navigation links
 navLinks.forEach(link => {
@@ -917,7 +1160,7 @@ navLinks.forEach(link => {
 
 // Close sidebar on escape key press
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && sidebar.classList.contains('active')) {
+    if (e.key === 'Escape' && sidebar && sidebar.classList.contains('active')) {
         closeSidebar();
     }
 });
@@ -926,9 +1169,9 @@ document.addEventListener('keydown', (e) => {
 function handleInitialLoad() {
     
     // Load data from storage
-    menuItems = JSON.parse(localStorage.getItem('menuItems')) || [];
-    orders = JSON.parse(localStorage.getItem('orders')) || [];
-    contactMessages = JSON.parse(localStorage.getItem('contactMessages')) || [];
+    menuItems = safeStorage.getJSON('menuItems') || [];
+    orders = safeStorage.getJSON('orders') || [];
+    contactMessages = safeStorage.getJSON('contactMessages') || [];
     
     updateNavigation();
     updateCart();
@@ -969,9 +1212,9 @@ window.addEventListener('hashchange', () => {
 
 // Close sidebar when clicking outside
 document.addEventListener('click', (e) => {
-    if (sidebar.classList.contains('active') && 
+    if (sidebar && sidebar.classList.contains('active') && 
         !sidebar.contains(e.target) && 
-        !hamburgerBtn.contains(e.target) &&
+        hamburgerBtn && !hamburgerBtn.contains(e.target) &&
         e.target !== overlay) {
         closeSidebar();
     }
@@ -988,9 +1231,9 @@ document.querySelectorAll('form').forEach(form => {
         const isRegisterForm = this.classList.contains('register-form');
         
         if (isContactForm) {
-            const name = contactNameInput.value.trim();
-            const email = contactEmailInput.value.trim();
-            const message = contactMessageInput.value.trim();
+            const name = contactNameInput?.value.trim() || '';
+            const email = contactEmailInput?.value.trim() || '';
+            const message = contactMessageInput?.value.trim() || '';
             
             if (!name || !email || !message) {
                 showToast('Please fill in all fields', 'error');
@@ -1003,21 +1246,21 @@ document.querySelectorAll('form').forEach(form => {
             showToast('Thank you for your message! We will get back to you soon.');
             this.reset();
             // Re-populate with user details if logged in
-            if (currentUser) {
+            if (currentUser && contactNameInput && contactEmailInput) {
                 contactNameInput.value = currentUser.name;
                 contactEmailInput.value = currentUser.email;
             }
         } else if (isLoginForm) {
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
+            const email = document.getElementById('loginEmail')?.value || '';
+            const password = document.getElementById('loginPassword')?.value || '';
             
             // Check credentials
-            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const users = safeStorage.getJSON('users') || [];
             const user = users.find(u => u.email === email && u.password === password);
             
             if (user) {
                 currentUser = user;
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                safeStorage.setJSON('currentUser', currentUser);
                 
                 // Check if user is manager or admin and redirect
                 if (checkUserTypeAndRedirect()) {
@@ -1034,7 +1277,7 @@ document.querySelectorAll('form').forEach(form => {
                 // Check for manager credentials
                 if (email === 'manager@mnt.com' && password === 'manager123') {
                     currentUser = { email: 'manager@mnt.com', password: 'manager123', name: 'Manager', phone: '' };
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    safeStorage.setJSON('currentUser', currentUser);
                     checkUserTypeAndRedirect();
                     return;
                 }
@@ -1042,7 +1285,7 @@ document.querySelectorAll('form').forEach(form => {
                 // Check for admin credentials
                 if (email === 'admin@admin.com' && password === 'admin123') {
                     currentUser = { email: 'admin@admin.com', password: 'admin123', name: 'Tumelo Segale', phone: '' };
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    safeStorage.setJSON('currentUser', currentUser);
                     checkUserTypeAndRedirect();
                     return;
                 }
@@ -1052,11 +1295,11 @@ document.querySelectorAll('form').forEach(form => {
             
             this.reset();
         } else if (isRegisterForm) {
-            const name = document.getElementById('registerName').value;
-            const email = document.getElementById('registerEmail').value;
-            const phone = document.getElementById('registerPhone').value;
-            const password = document.getElementById('registerPassword').value;
-            const confirmPassword = document.getElementById('registerConfirmPassword').value;
+            const name = document.getElementById('registerName')?.value || '';
+            const email = document.getElementById('registerEmail')?.value || '';
+            const phone = document.getElementById('registerPhone')?.value || '';
+            const password = document.getElementById('registerPassword')?.value || '';
+            const confirmPassword = document.getElementById('registerConfirmPassword')?.value || '';
             
             // Validation
             if (password !== confirmPassword) {
@@ -1070,7 +1313,7 @@ document.querySelectorAll('form').forEach(form => {
             }
             
             // Check if user already exists
-            const users = JSON.parse(localStorage.getItem('users')) || [];
+            const users = safeStorage.getJSON('users') || [];
             if (users.some(u => u.email === email)) {
                 showToast('Email already registered', 'error');
                 return;
@@ -1085,11 +1328,11 @@ document.querySelectorAll('form').forEach(form => {
             // Create new user
             const newUser = { name, email, phone, password };
             users.push(newUser);
-            localStorage.setItem('users', JSON.stringify(users));
+            safeStorage.setJSON('users', JSON.stringify(users));
             
             // Auto login
             currentUser = newUser;
-            localStorage.setItem('currentUser', JSON.stringify(newUser));
+            safeStorage.setJSON('currentUser', newUser);
             updateNavigation();
             updateContactForm();
             showToast('Registration successful!');
@@ -1102,12 +1345,12 @@ document.querySelectorAll('form').forEach(form => {
 });
 
 // Form switching
-showRegister?.addEventListener('click', (e) => {
+if (showRegister) showRegister.addEventListener('click', (e) => {
     e.preventDefault();
     showRegisterForm();
 });
 
-showLogin?.addEventListener('click', (e) => {
+if (showLogin) showLogin.addEventListener('click', (e) => {
     e.preventDefault();
     showLoginForm();
 });
@@ -1117,7 +1360,7 @@ filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         showMenuCategory(btn.dataset.filter);
         // Clear search when changing filter
-        menuSearch.value = '';
+        if (menuSearch) menuSearch.value = '';
         // Show all items in the selected category
         document.querySelectorAll('.menu-item').forEach(item => {
             if (item.dataset.category === btn.dataset.filter) {
@@ -1130,21 +1373,21 @@ filterBtns.forEach(btn => {
 });
 
 // Menu search
-menuSearch?.addEventListener('input', (e) => {
+if (menuSearch) menuSearch.addEventListener('input', (e) => {
     searchMenuItems(e.target.value);
 });
 
 // Cart functionality
-cartBtn?.addEventListener('click', toggleCartModal);
-closeCart?.addEventListener('click', () => {
-    cartModal.classList.remove('active');
+if (cartBtn) cartBtn.addEventListener('click', toggleCartModal);
+if (closeCart) closeCart.addEventListener('click', () => {
+    if (cartModal) cartModal.classList.remove('active');
 });
 
 // Order modal functionality
-closeOrderModal?.addEventListener('click', closeOrderModalFunc);
+if (closeOrderModal) closeOrderModal.addEventListener('click', closeOrderModalFunc);
 
 // Close order modal when clicking outside
-orderModal?.addEventListener('click', (e) => {
+if (orderModal) orderModal.addEventListener('click', (e) => {
     if (e.target === orderModal) {
         closeOrderModalFunc();
     }
@@ -1152,13 +1395,13 @@ orderModal?.addEventListener('click', (e) => {
 
 // Close order modal with escape key
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && orderModal.classList.contains('active')) {
+    if (e.key === 'Escape' && orderModal && orderModal.classList.contains('active')) {
         closeOrderModalFunc();
     }
 });
 
 // Checkout button
-checkoutBtn?.addEventListener('click', () => {
+if (checkoutBtn) checkoutBtn.addEventListener('click', () => {
     if (cart.length === 0) {
         showToast('Your cart is empty!', 'error');
         return;
@@ -1170,70 +1413,57 @@ checkoutBtn?.addEventListener('click', () => {
         return;
     }
     
-    // Save order
-    saveOrder();
-    
-    // Show success message with PIN
-    const latestOrder = orders.find(order => order.userEmail === currentUser.email && order.timestamp > Date.now() - 1000);
-    if (latestOrder) {
-        showToast(`Order placed successfully! Your PIN: ${latestOrder.pin}. Order status: ${latestOrder.status}`);
-    } else {
-        showToast('Order placed successfully!');
+    if (!isWithinOperatingHours()) {
+        showToast('Orders can only be placed during operating hours', 'error');
+        return;
     }
     
-    // Clear cart
-    cart = [];
-    updateCart();
-    updateCartVisibility();
-    saveCartToStorage();
-    cartModal.classList.remove('active');
-    
-    // Navigate to orders section
-    setActiveSection('orders');
+    // Process payment with Paystack
+    processPayment();
 });
 
 // Profile edit functionality
-editProfileBtn?.addEventListener('click', showEditProfileModal);
-deleteProfileBtn?.addEventListener('click', showDeleteConfirmModal);
+if (editProfileBtn) editProfileBtn.addEventListener('click', showEditProfileModal);
+if (deleteProfileBtn) deleteProfileBtn.addEventListener('click', showDeleteConfirmModal);
 
 // Profile edit modal functionality
-closeProfileEditModal?.addEventListener('click', closeEditProfileModal);
-cancelProfileEdit?.addEventListener('click', closeEditProfileModal);
+if (closeProfileEditModal) closeProfileEditModal.addEventListener('click', closeEditProfileModal);
+if (cancelProfileEdit) cancelProfileEdit.addEventListener('click', closeEditProfileModal);
 
 // Close profile edit modal when clicking outside
-profileEditModal?.addEventListener('click', (e) => {
+if (profileEditModal) profileEditModal.addEventListener('click', (e) => {
     if (e.target === profileEditModal) {
         closeEditProfileModal();
     }
 });
 
 // Save profile changes
-saveProfileBtn?.addEventListener('click', saveProfileChanges);
+if (saveProfileBtn) saveProfileBtn.addEventListener('click', saveProfileChanges);
 
 // Delete confirmation modal functionality
-closeDeleteModal?.addEventListener('click', closeDeleteConfirmModal);
-cancelDelete?.addEventListener('click', closeDeleteConfirmModal);
+if (closeDeleteModal) closeDeleteModal.addEventListener('click', closeDeleteConfirmModal);
+if (cancelDelete) cancelDelete.addEventListener('click', closeDeleteConfirmModal);
 
 // Close delete modal when clicking outside
-deleteConfirmModal?.addEventListener('click', (e) => {
+if (deleteConfirmModal) deleteConfirmModal.addEventListener('click', (e) => {
     if (e.target === deleteConfirmModal) {
         closeDeleteConfirmModal();
     }
 });
 
 // Confirm delete
-confirmDelete?.addEventListener('click', deleteUserProfile);
+if (confirmDelete) confirmDelete.addEventListener('click', deleteUserProfile);
 
 // Close modals with escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        if (orderModal.classList.contains('active')) {
+        if (orderModal && orderModal.classList.contains('active')) {
             closeOrderModalFunc();
         }
-        if (profileEditModal.classList.contains('active')) {
+        if (profileEditModal && profileEditModal.classList.contains('active')) {
             closeEditProfileModal();
         }
-        if (deleteConfirmModal.classList.contains('active')) {
+        if (deleteConfirmModal && deleteConfirmModal.classList.contains('active')) {
             closeDeleteConfirmModal();
         }
     }
@@ -1242,8 +1472,8 @@ document.addEventListener('keydown', (e) => {
 // Listen for real-time updates from manager
 window.addEventListener('ordersUpdated', function() {
     // Reload orders when manager updates them
-    orders = JSON.parse(localStorage.getItem('orders')) || [];
-    if (document.getElementById('orders').classList.contains('active') && currentUser) {
+    orders = safeStorage.getJSON('orders') || [];
+    if (document.getElementById('orders')?.classList.contains('active') && currentUser) {
         displayOrders();
         showToast('Order status updated!', 'success');
     }
@@ -1251,8 +1481,8 @@ window.addEventListener('ordersUpdated', function() {
 
 window.addEventListener('menuItemsUpdated', function() {
     // Reload menu items when manager updates them
-    menuItems = JSON.parse(localStorage.getItem('menuItems')) || [];
-    if (document.getElementById('menu').classList.contains('active')) {
+    menuItems = safeStorage.getJSON('menuItems') || [];
+    if (document.getElementById('menu')?.classList.contains('active')) {
         displayMenuItems();
     }
 });
@@ -1264,6 +1494,8 @@ document.addEventListener('DOMContentLoaded', handleInitialLoad);
 function checkDevice() {
     const desktopWarning = document.getElementById('desktopWarning');
     const mobileContent = document.getElementById('mobileContent');
+    
+    if (!desktopWarning || !mobileContent) return;
     
     if (window.innerWidth >= 1025) {
         desktopWarning.style.display = 'flex';
@@ -1277,3 +1509,17 @@ function checkDevice() {
 // Initial check and resize listener
 checkDevice();
 window.addEventListener('resize', checkDevice);
+
+// Add Paystack script dynamically if not already loaded
+if (typeof PaystackPop === 'undefined') {
+    const paystackScript = document.createElement('script');
+    paystackScript.src = 'https://js.paystack.co/v1/inline.js';
+    paystackScript.onload = function() {
+        console.log('Paystack script loaded successfully');
+    };
+    paystackScript.onerror = function() {
+        console.error('Failed to load Paystack script');
+        showToast('Payment system not available. Please try again later.', 'error');
+    };
+    document.head.appendChild(paystackScript);
+}

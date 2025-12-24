@@ -63,6 +63,10 @@ const pinInput = document.getElementById('pinInput');
 const verifyPin = document.getElementById('verifyPin');
 const pinError = document.getElementById('pinError');
 
+// New elements for yearly reset and download
+const resetYearBtn = document.getElementById('resetYearBtn');
+const downloadStatementBtn = document.getElementById('downloadStatementBtn');
+
 // Toast element
 const toast = document.getElementById('toast');
 
@@ -82,6 +86,11 @@ let currentActionData = null;
 let currentOrderForPin = null;
 let currentOrderForDetails = null;
 let currentFilterStatus = 'pending';
+let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {
+    year: new Date().getFullYear(),
+    revenue: 0,
+    orders: 0
+};
 
 // Show toast message
 function showToast(message, type = 'success') {
@@ -154,6 +163,7 @@ function loadOrders() {
 function updateDashboardStats() {
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const currentYear = new Date().getFullYear();
     
     // Today's orders
     const todayOrdersCount = currentOrders.filter(order => 
@@ -225,6 +235,22 @@ function updateDashboardStats() {
     } else {
         completedOrdersCard.textContent = completedOrdersCount;
     }
+    
+    // Update yearly stats
+    const yearlyOrders = currentOrders.filter(order => 
+        order.status === 'completed' &&
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
+    
+    const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    yearlyStats = {
+        year: currentYear,
+        revenue: yearlyRevenue,
+        orders: yearlyOrders.length
+    };
+    
+    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
 }
 
 // Search orders
@@ -810,11 +836,74 @@ function handleConfirmedAction() {
             // Redirect to main site
             window.location.href = 'index.html';
             break;
+        case 'resetYear':
+            resetYearlyStats();
+            break;
     }
     
     confirmModal.classList.remove('active');
     currentAction = null;
     currentActionData = null;
+}
+
+// Reset yearly statistics
+function resetYearlyStats() {
+    const currentYear = new Date().getFullYear();
+    
+    yearlyStats = {
+        year: currentYear,
+        revenue: 0,
+        orders: 0
+    };
+    
+    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
+    localStorage.setItem('lastManagerResetYear', currentYear);
+    
+    showToast(`Yearly statistics reset for ${currentYear}`);
+    updateDashboardStats();
+}
+
+// Download statement as Excel file
+function downloadStatement() {
+    const currentYear = new Date().getFullYear();
+    const yearlyOrders = currentOrders.filter(order => 
+        order.status === 'completed' && 
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
+    
+    if (yearlyOrders.length === 0) {
+        showToast('No completed orders for the current year', 'error');
+        return;
+    }
+    
+    // Prepare CSV content
+    let csvContent = "data:text/csv;charset=utf-8,";
+    
+    // Add header
+    csvContent += "Year,Total Completed Orders,Total Revenue\n";
+    csvContent += `${currentYear},${yearlyStats.orders},${yearlyStats.revenue}\n\n`;
+    
+    // Add table header
+    csvContent += "Date,Order ID,Order Amount\n";
+    
+    // Add order data
+    yearlyOrders.forEach(order => {
+        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
+        csvContent += `${date},${order.orderId || 'Unknown'},${order.total || 0}\n`;
+    });
+    
+    // Create download link
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `M&T_Manager_Statement_${currentYear}.csv`);
+    document.body.appendChild(link);
+    
+    // Trigger download
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast(`Statement downloaded for ${currentYear}`);
 }
 
 // Toggle sidebar function
@@ -900,6 +989,37 @@ function initialize() {
             <div class="stat-label">Total completed orders</div>
         `;
         statsGrid.appendChild(completedOrdersCard);
+    }
+    
+    // Create reset and download sections if they don't exist
+    const dashboardContent = document.querySelector('#dashboard .section-content');
+    if (dashboardContent && !document.querySelector('.reset-section')) {
+        const resetSection = document.createElement('div');
+        resetSection.className = 'reset-section';
+        resetSection.innerHTML = `
+            <h3>Yearly Data Management</h3>
+            <p>Reset dashboard statistics for the new year</p>
+            <button class="reset-year-btn" id="resetYearBtn">Reset Yearly Stats</button>
+        `;
+        
+        const downloadSection = document.createElement('div');
+        downloadSection.className = 'download-section';
+        downloadSection.innerHTML = `
+            <h3>Annual Statement</h3>
+            <p>Download complete order data for the current year</p>
+            <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
+        `;
+        
+        dashboardContent.appendChild(resetSection);
+        dashboardContent.appendChild(downloadSection);
+        
+        // Add event listeners to new buttons
+        document.getElementById('resetYearBtn').addEventListener('click', () => {
+            const currentYear = new Date().getFullYear();
+            showConfirmModal('resetYear', null, `Reset yearly statistics for ${currentYear}?`);
+        });
+        
+        document.getElementById('downloadStatementBtn').addEventListener('click', downloadStatement);
     }
     
     updateDashboardStats();
@@ -1150,5 +1270,22 @@ window.addEventListener('hashchange', () => {
     }
 });
 
+// Listen for real-time updates
+window.addEventListener('ordersUpdated', function() {
+    loadOrders();
+    updateDashboardStats();
+    if (document.getElementById('orders').classList.contains('active')) {
+        displayAllOrders(currentFilterStatus);
+    }
+});
+
+window.addEventListener('messagesUpdated', function() {
+    messages = JSON.parse(localStorage.getItem('contactMessages')) || [];
+    if (document.getElementById('messages').classList.contains('active')) {
+        displayMessages();
+    }
+});
+
 // Initial check and resize listener
 window.addEventListener('resize', checkDevice);
+
