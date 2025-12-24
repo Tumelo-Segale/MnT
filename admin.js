@@ -53,11 +53,12 @@ let statsResetCheck = JSON.parse(localStorage.getItem('statsResetCheck')) || {};
 // Show toast message
 function showToast(message, type = 'success') {
     toast.textContent = message;
-    toast.style.background = type === 'success' ? '#28a745' : '#b22222';
+    toast.className = `toast ${type}`;
     toast.style.display = 'block';
     
     setTimeout(() => {
         toast.style.display = 'none';
+        toast.className = 'toast';
     }, 2000);
 }
 
@@ -84,22 +85,22 @@ function calculateProfit(amount) {
 
 // Check and reset yearly stats if new year
 function checkYearlyReset() {
-    const currentYear = new Date().getFullYear();
-    const lastResetYear = statsResetCheck.lastResetYear || currentYear;
+    const currentYearVal = new Date().getFullYear();
+    const lastResetYear = statsResetCheck.lastResetYear || currentYearVal;
     
-    if (currentYear > lastResetYear) {
-        showResetConfirmation(currentYear, lastResetYear);
+    if (currentYearVal > lastResetYear) {
+        showResetConfirmation(currentYearVal, lastResetYear);
     }
 }
 
 // Show reset confirmation
-function showResetConfirmation(currentYear, lastResetYear) {
-    confirmMessage.textContent = `New year detected (${currentYear}). Would you like to reset yearly statistics? This will clear all data for ${lastResetYear}.`;
+function showResetConfirmation(currentYearVal, lastResetYear) {
+    confirmMessage.textContent = `New year detected (${currentYearVal}). Would you like to reset yearly statistics? This will clear all data for ${lastResetYear}.`;
     confirmModal.classList.add('active');
     
     // Store reset info
     localStorage.setItem('pendingYearReset', JSON.stringify({
-        currentYear: currentYear,
+        currentYear: currentYearVal,
         lastResetYear: lastResetYear
     }));
 }
@@ -109,7 +110,7 @@ function resetYearlyStats() {
     const resetInfo = JSON.parse(localStorage.getItem('pendingYearReset'));
     if (!resetInfo) return;
     
-    const { currentYear, lastResetYear } = resetInfo;
+    const { currentYear: currentYearVal, lastResetYear } = resetInfo;
     
     // Archive old yearly stats
     const archivedStats = JSON.parse(localStorage.getItem('archivedStats')) || {};
@@ -117,7 +118,7 @@ function resetYearlyStats() {
     localStorage.setItem('archivedStats', JSON.stringify(archivedStats));
     
     // Reset current yearly stats
-    yearlyStats[currentYear] = {
+    yearlyStats[currentYearVal] = {
         revenue: 0,
         orders: 0,
         profit: 0
@@ -125,7 +126,7 @@ function resetYearlyStats() {
     
     // Update reset check
     statsResetCheck = {
-        lastResetYear: currentYear,
+        lastResetYear: currentYearVal,
         lastResetDate: new Date().toISOString()
     };
     
@@ -133,7 +134,7 @@ function resetYearlyStats() {
     localStorage.setItem('statsResetCheck', JSON.stringify(statsResetCheck));
     localStorage.removeItem('pendingYearReset');
     
-    showToast(`Yearly statistics reset for ${currentYear}`);
+    showToast(`Yearly statistics reset for ${currentYearVal}`);
     updateDashboardStats();
 }
 
@@ -295,15 +296,15 @@ function downloadYearlyStatement() {
     }
     
     // Calculate yearly totals
-    const yearlyRevenue = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
-    const yearlyProfit = calculateProfit(yearlyRevenue);
+    const yearlyRevenueAmount = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
+    const yearlyProfitAmount = calculateProfit(yearlyRevenueAmount);
     
     // Create CSV content
     let csvContent = "Yearly Statement\n\n";
     csvContent += `Year: ${currentYearVal}\n`;
     csvContent += `Total Completed Orders: ${completedOrdersList.length}\n`;
-    csvContent += `Total Revenue Generated: ${formatCurrency(yearlyRevenue)}\n`;
-    csvContent += `Total Transactional Profit: ${formatCurrency(yearlyProfit)}\n\n`;
+    csvContent += `Total Revenue Generated: ${formatCurrency(yearlyRevenueAmount)}\n`;
+    csvContent += `Total Transactional Profit: ${formatCurrency(yearlyProfitAmount)}\n\n`;
     
     csvContent += "Order Details:\n";
     csvContent += "Date,Order ID,Order Amount,5% Transactional Profit\n";

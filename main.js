@@ -1325,7 +1325,7 @@ checkoutBtn?.addEventListener('click', () => {
     
     // Initialize Paystack payment
     const handler = PaystackPop.setup({
-        key: 'pk_test_YOUR_PAYSTACK_PUBLIC_KEY', // Replace with your Paystack public key
+        key: 'pk_test_328d06e1e7acac75cab1175db7c135a8f1697132', // Replace with your Paystack public key
         email: currentUser.email,
         amount: total * 100, // Convert to kobo
         currency: 'ZAR',
