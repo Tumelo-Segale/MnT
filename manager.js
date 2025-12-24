@@ -151,18 +151,18 @@ function loadOrders() {
     });
 }
 
-// Update dashboard stats
+// Update dashboard stats - FIXED VERSION
 function updateDashboardStats() {
     const today = new Date().toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     
     // Today's orders
     const todayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(today)
+        order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed'
     ).length;
     
     const yesterdayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(yesterday)
+        order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed'
     ).length;
     
     const ordersChange = yesterdayOrdersCount > 0 ? 
@@ -175,11 +175,11 @@ function updateDashboardStats() {
     
     // Today's revenue
     const todayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(today))
+        .filter(order => order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed')
         .reduce((sum, order) => sum + (order.total || 0), 0);
     
     const yesterdayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(yesterday))
+        .filter(order => order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed')
         .reduce((sum, order) => sum + (order.total || 0), 0);
     
     const revenueChangePercent = yesterdayRevenueAmount > 0 ? 
@@ -198,6 +198,7 @@ function updateDashboardStats() {
     
     // Total revenue
     const allTimeRevenue = currentOrders
+        .filter(order => order.status === 'completed')
         .reduce((sum, order) => sum + (order.total || 0), 0);
     
     totalRevenue.textContent = formatCurrency(allTimeRevenue);
@@ -210,6 +211,31 @@ function updateDashboardStats() {
     const completedOrdersCard = document.getElementById('completedOrders');
     if (completedOrdersCard) {
         completedOrdersCard.textContent = completedOrdersCount;
+    }
+    
+    // Yearly stats - FIXED: Make sure we're using completed orders only
+    const currentYear = new Date().getFullYear();
+    const yearlyCompletedOrders = currentOrders.filter(order => 
+        order.status === 'completed' && 
+        order.timestamp && 
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
+    
+    const yearlyRevenue = yearlyCompletedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    // Update yearly stats in storage
+    yearlyStats[currentYear] = {
+        revenue: yearlyRevenue,
+        orders: yearlyCompletedOrders.length
+    };
+    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
+    
+    // Update yearly display if elements exist
+    if (document.getElementById('yearlyRevenue')) {
+        document.getElementById('yearlyRevenue').textContent = formatCurrency(yearlyRevenue);
+    }
+    if (document.getElementById('yearlyOrders')) {
+        document.getElementById('yearlyOrders').textContent = yearlyCompletedOrders.length;
     }
 }
 
@@ -871,6 +897,141 @@ function handleNavClick(e) {
     window.location.hash = targetId;
 }
 
+// Yearly stats
+let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {};
+let statsResetCheck = JSON.parse(localStorage.getItem('managerStatsResetCheck')) || {};
+
+// Check and reset yearly stats if new year
+function checkYearlyReset() {
+    const currentYear = new Date().getFullYear();
+    const lastResetYear = statsResetCheck.lastResetYear || currentYear;
+    
+    if (currentYear > lastResetYear) {
+        showResetConfirmation(currentYear, lastResetYear);
+    }
+}
+
+// Show reset confirmation
+function showResetConfirmation(currentYear, lastResetYear) {
+    confirmMessage.textContent = `New year detected (${currentYear}). Would you like to reset yearly statistics? This will clear all data for ${lastResetYear}.`;
+    confirmModal.classList.add('active');
+    
+    // Store reset info
+    localStorage.setItem('managerPendingYearReset', JSON.stringify({
+        currentYear: currentYear,
+        lastResetYear: lastResetYear
+    }));
+}
+
+// Reset yearly stats
+function resetYearlyStats() {
+    const resetInfo = JSON.parse(localStorage.getItem('managerPendingYearReset'));
+    if (!resetInfo) return;
+    
+    const { currentYear, lastResetYear } = resetInfo;
+    
+    // Archive old yearly stats
+    const archivedStats = JSON.parse(localStorage.getItem('managerArchivedStats')) || {};
+    archivedStats[lastResetYear] = yearlyStats[lastResetYear] || {};
+    localStorage.setItem('managerArchivedStats', JSON.stringify(archivedStats));
+    
+    // Reset current yearly stats
+    yearlyStats[currentYear] = {
+        revenue: 0,
+        orders: 0
+    };
+    
+    // Update reset check
+    statsResetCheck = {
+        lastResetYear: currentYear,
+        lastResetDate: new Date().toISOString()
+    };
+    
+    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
+    localStorage.setItem('managerStatsResetCheck', JSON.stringify(statsResetCheck));
+    localStorage.removeItem('managerPendingYearReset');
+    
+    showToast(`Yearly statistics reset for ${currentYear}`);
+    updateDashboardStats();
+}
+
+// Generate and download yearly statement
+function downloadYearlyStatement() {
+    const currentYear = new Date().getFullYear();
+    const completedOrdersList = currentOrders.filter(order => 
+        order.status === 'completed' &&
+        order.timestamp && 
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
+    
+    if (completedOrdersList.length === 0) {
+        showToast('No completed orders for the current year', 'error');
+        return;
+    }
+    
+    // Calculate yearly totals
+    const yearlyRevenue = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    // Create CSV content
+    let csvContent = "Yearly Statement\n\n";
+    csvContent += `Year: ${currentYear}\n`;
+    csvContent += `Total Completed Orders: ${completedOrdersList.length}\n`;
+    csvContent += `Total Revenue Generated: ${formatCurrency(yearlyRevenue)}\n\n`;
+    
+    csvContent += "Order Details:\n";
+    csvContent += "Date,Order ID,Order Amount\n";
+    
+    completedOrdersList.forEach(order => {
+        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
+        const orderAmount = order.total || 0;
+        
+        csvContent += `${date},${order.orderId || 'N/A'},${orderAmount.toFixed(2)}\n`;
+    });
+    
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `M&T_Manager_Statement_${currentYear}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Yearly statement downloaded successfully');
+}
+
+// Add download button to dashboard in manager.html
+function addDownloadButtonToDashboard() {
+    const dashboardSection = document.getElementById('dashboard');
+    const existingDownloadSection = dashboardSection.querySelector('.download-section');
+    
+    if (!existingDownloadSection) {
+        const downloadSection = document.createElement('div');
+        downloadSection.className = 'download-section';
+        downloadSection.innerHTML = `
+            <button class="download-btn" id="downloadStatement">
+                Download Yearly Statement
+            </button>
+            <button class="reset-btn" id="resetStats">
+                Reset Yearly Stats
+            </button>
+        `;
+        
+        dashboardSection.querySelector('.section-content').appendChild(downloadSection);
+        
+        // Add event listeners
+        document.getElementById('downloadStatement')?.addEventListener('click', downloadYearlyStatement);
+        document.getElementById('resetStats')?.addEventListener('click', () => {
+            confirmMessage.textContent = 'Are you sure you want to reset yearly statistics? This will clear all data for the current year and cannot be undone.';
+            confirmModal.classList.add('active');
+        });
+    }
+}
+
 // Initialize
 function initialize() {
     // Load initial data
@@ -888,6 +1049,12 @@ function initialize() {
         `;
         statsGrid.appendChild(completedOrdersCard);
     }
+    
+    // Add download button to dashboard
+    addDownloadButtonToDashboard();
+    
+    // Check for yearly reset
+    checkYearlyReset();
     
     updateDashboardStats();
     displayAllOrders('pending');
@@ -1144,266 +1311,6 @@ window.addEventListener('hashchange', () => {
         }
     }
 });
-
-// Yearly stats
-let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {};
-let statsResetCheck = JSON.parse(localStorage.getItem('managerStatsResetCheck')) || {};
-
-// Check and reset yearly stats if new year
-function checkYearlyReset() {
-    const currentYear = new Date().getFullYear();
-    const lastResetYear = statsResetCheck.lastResetYear || currentYear;
-    
-    if (currentYear > lastResetYear) {
-        showResetConfirmation(currentYear, lastResetYear);
-    }
-}
-
-// Show reset confirmation
-function showResetConfirmation(currentYear, lastResetYear) {
-    confirmMessage.textContent = `New year detected (${currentYear}). Would you like to reset yearly statistics? This will clear all data for ${lastResetYear}.`;
-    confirmModal.classList.add('active');
-    
-    // Store reset info
-    localStorage.setItem('managerPendingYearReset', JSON.stringify({
-        currentYear: currentYear,
-        lastResetYear: lastResetYear
-    }));
-}
-
-// Reset yearly stats
-function resetYearlyStats() {
-    const resetInfo = JSON.parse(localStorage.getItem('managerPendingYearReset'));
-    if (!resetInfo) return;
-    
-    const { currentYear, lastResetYear } = resetInfo;
-    
-    // Archive old yearly stats
-    const archivedStats = JSON.parse(localStorage.getItem('managerArchivedStats')) || {};
-    archivedStats[lastResetYear] = yearlyStats[lastResetYear] || {};
-    localStorage.setItem('managerArchivedStats', JSON.stringify(archivedStats));
-    
-    // Reset current yearly stats
-    yearlyStats[currentYear] = {
-        revenue: 0,
-        orders: 0
-    };
-    
-    // Update reset check
-    statsResetCheck = {
-        lastResetYear: currentYear,
-        lastResetDate: new Date().toISOString()
-    };
-    
-    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
-    localStorage.setItem('managerStatsResetCheck', JSON.stringify(statsResetCheck));
-    localStorage.removeItem('managerPendingYearReset');
-    
-    showToast(`Yearly statistics reset for ${currentYear}`);
-    updateDashboardStats();
-}
-
-// Update dashboard stats to include yearly tracking
-function updateDashboardStats() {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const currentYear = new Date().getFullYear();
-    
-    // Today's orders
-    const todayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed'
-    ).length;
-    
-    const yesterdayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed'
-    ).length;
-    
-    const ordersChange = yesterdayOrdersCount > 0 ? 
-        Math.round(((todayOrdersCount - yesterdayOrdersCount) / yesterdayOrdersCount) * 100) : 0;
-    
-    todayOrders.textContent = todayOrdersCount;
-    todayOrdersChange.textContent = 
-        `${ordersChange >= 0 ? '+' : ''}${ordersChange}% from yesterday`;
-    todayOrdersChange.className = `stat-change ${ordersChange < 0 ? 'negative' : ''}`;
-    
-    // Today's revenue
-    const todayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    const yesterdayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    const revenueChangePercent = yesterdayRevenueAmount > 0 ? 
-        Math.round(((todayRevenueAmount - yesterdayRevenueAmount) / yesterdayRevenueAmount) * 100) : 0;
-    
-    todayRevenue.textContent = formatCurrency(todayRevenueAmount);
-    todayRevenueChange.textContent = 
-        `${revenueChangePercent >= 0 ? '+' : ''}${revenueChangePercent}% from yesterday`;
-    todayRevenueChange.className = `stat-change ${revenueChangePercent < 0 ? 'negative' : ''}`;
-    
-    // Pending orders
-    const pendingCount = currentOrders.filter(order => 
-        order.status === 'pending'
-    ).length;
-    pendingOrders.textContent = pendingCount;
-    
-    // Total revenue
-    const allTimeRevenue = currentOrders
-        .filter(order => order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    totalRevenue.textContent = formatCurrency(allTimeRevenue);
-    
-    // Completed orders stat
-    const completedOrdersCount = currentOrders.filter(order => 
-        order.status === 'completed'
-    ).length;
-    
-    const completedOrdersCard = document.getElementById('completedOrders');
-    if (completedOrdersCard) {
-        completedOrdersCard.textContent = completedOrdersCount;
-    }
-    
-    // Update yearly stats
-    const yearlyCompletedOrders = currentOrders.filter(order => 
-        order.status === 'completed' && 
-        order.timestamp && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    ).length;
-    
-    const yearlyRevenue = yearlyCompletedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Update yearly stats in storage
-    yearlyStats[currentYear] = {
-        revenue: yearlyRevenue,
-        orders: yearlyCompletedOrders
-    };
-    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
-}
-
-// Generate and download yearly statement
-function downloadYearlyStatement() {
-    const currentYear = new Date().getFullYear();
-    const completedOrdersList = currentOrders.filter(order => 
-        order.status === 'completed' &&
-        order.timestamp && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
-    
-    if (completedOrdersList.length === 0) {
-        showToast('No completed orders for the current year', 'error');
-        return;
-    }
-    
-    // Calculate yearly totals
-    const yearlyRevenue = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Create CSV content
-    let csvContent = "Yearly Statement\n\n";
-    csvContent += `Year: ${currentYear}\n`;
-    csvContent += `Total Completed Orders: ${completedOrdersList.length}\n`;
-    csvContent += `Total Revenue Generated: ${formatCurrency(yearlyRevenue)}\n\n`;
-    
-    csvContent += "Order Details:\n";
-    csvContent += "Date,Order ID,Order Amount\n";
-    
-    completedOrdersList.forEach(order => {
-        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
-        const orderAmount = order.total || 0;
-        
-        csvContent += `${date},${order.orderId || 'N/A'},${orderAmount.toFixed(2)}\n`;
-    });
-    
-    // Create blob and download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", `M&T_Manager_Statement_${currentYear}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showToast('Yearly statement downloaded successfully');
-}
-
-// Add download button to dashboard in manager.html
-function addDownloadButtonToDashboard() {
-    const dashboardSection = document.getElementById('dashboard');
-    const existingDownloadSection = dashboardSection.querySelector('.download-section');
-    
-    if (!existingDownloadSection) {
-        const downloadSection = document.createElement('div');
-        downloadSection.className = 'download-section';
-        downloadSection.innerHTML = `
-            <button class="download-btn" id="downloadStatement">
-                Download Yearly Statement
-            </button>
-            <button class="reset-btn" id="resetStats">
-                Reset Yearly Stats
-            </button>
-        `;
-        
-        dashboardSection.querySelector('.section-content').appendChild(downloadSection);
-        
-        // Add event listeners
-        document.getElementById('downloadStatement')?.addEventListener('click', downloadYearlyStatement);
-        document.getElementById('resetStats')?.addEventListener('click', () => {
-            confirmMessage.textContent = 'Are you sure you want to reset yearly statistics? This will clear all data for the current year and cannot be undone.';
-            confirmModal.classList.add('active');
-        });
-    }
-}
-
-// Update manager.js initialization
-function initialize() {
-    // Load initial data
-    loadOrders();
-    
-    // Create completed orders stat card if it doesn't exist
-    const statsGrid = document.querySelector('.stats-grid');
-    if (statsGrid && !document.getElementById('completedOrders')) {
-        const completedOrdersCard = document.createElement('div');
-        completedOrdersCard.className = 'stat-card';
-        completedOrdersCard.innerHTML = `
-            <h3>Completed Orders</h3>
-            <div class="stat-number" id="completedOrders">0</div>
-            <div class="stat-label">Total completed orders</div>
-        `;
-        statsGrid.appendChild(completedOrdersCard);
-    }
-    
-    // Add download button to dashboard
-    addDownloadButtonToDashboard();
-    
-    // Check for yearly reset
-    checkYearlyReset();
-    
-    updateDashboardStats();
-    displayAllOrders('pending');
-    displayMenuItems('meals');
-    displayMessages();
-    loadManagerData();
-    
-    // Sync items to main app on initial load
-    syncItemsToMainApp();
-    
-    // Set active section based on URL hash
-    const hash = window.location.hash.substring(1) || 'dashboard';
-    const validSections = ['dashboard', 'orders', 'items', 'messages', 'details'];
-    
-    if (validSections.includes(hash)) {
-        const link = document.querySelector(`.nav-link[href="#${hash}"]`);
-        if (link) {
-            handleNavClick.call(link, new Event('click'));
-        }
-    }
-}
 
 // Initial check and resize listener
 window.addEventListener('resize', checkDevice);

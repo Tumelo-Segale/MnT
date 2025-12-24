@@ -158,18 +158,24 @@ function updateDashboardStats() {
     totalProfit.textContent = formatCurrency(totalProfitAmount);
     currentYear.textContent = currentYearVal;
     
+    // Calculate yearly stats
+    const yearlyCompletedOrders = completedOrdersList.filter(order => 
+        order.timestamp && new Date(order.timestamp).getFullYear() === currentYearVal
+    );
+    const yearlyRevenueAmount = yearlyCompletedOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    const yearlyProfitAmount = calculateProfit(yearlyRevenueAmount);
+    
     // Update yearly stats
-    const yearStats = yearlyStats[currentYearVal] || { revenue: 0, orders: 0, profit: 0 };
-    yearlyRevenue.textContent = formatCurrency(yearStats.revenue || 0);
-    yearlyOrders.textContent = yearStats.orders || 0;
-    yearlyProfit.textContent = formatCurrency(yearStats.profit || 0);
+    yearlyRevenue.textContent = formatCurrency(yearlyRevenueAmount);
+    yearlyOrders.textContent = yearlyCompletedOrders.length;
+    yearlyProfit.textContent = formatCurrency(yearlyProfitAmount);
     yearlyLabel.textContent = `${currentYearVal} revenue`;
     
     // Save updated yearly stats
     yearlyStats[currentYearVal] = {
-        revenue: yearStats.revenue || 0,
-        orders: yearStats.orders || 0,
-        profit: yearStats.profit || 0
+        revenue: yearlyRevenueAmount,
+        orders: yearlyCompletedOrders.length,
+        profit: yearlyProfitAmount
     };
     localStorage.setItem('yearlyStats', JSON.stringify(yearlyStats));
 }

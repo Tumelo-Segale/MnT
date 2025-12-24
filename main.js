@@ -1159,7 +1159,26 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Checkout button
+// Check if within operating hours
+function isWithinOperatingHours() {
+    const now = new Date();
+    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const currentTime = hour + minute / 60;
+    
+    // Operating hours:
+    // Monday-Saturday: 09:00 - 20:00
+    // Sunday & Holidays: 10:00 - 19:00
+    
+    if (day === 0) { // Sunday
+        return currentTime >= 10 && currentTime < 19;
+    } else { // Monday-Saturday
+        return currentTime >= 9 && currentTime < 20;
+    }
+}
+
+// Checkout button - FIXED VERSION with Paystack
 checkoutBtn?.addEventListener('click', () => {
     if (cart.length === 0) {
         showToast('Your cart is empty!', 'error');
@@ -1172,26 +1191,60 @@ checkoutBtn?.addEventListener('click', () => {
         return;
     }
     
-    // Save order
-    saveOrder();
-    
-    // Show success message with PIN
-    const latestOrder = orders.find(order => order.userEmail === currentUser.email && order.timestamp > Date.now() - 1000);
-    if (latestOrder) {
-        showToast(`Order placed successfully! Your PIN: ${latestOrder.pin}. Order status: ${latestOrder.status}`);
-    } else {
-        showToast('Order placed successfully!');
+    // Check operating hours
+    if (!isWithinOperatingHours()) {
+        const now = new Date();
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        
+        showToast(`Orders can only be placed during operating hours. Today (${dayNames[now.getDay()]}) hours: ${now.getDay() === 0 ? '10:00-19:00' : '09:00-20:00'}`, 'error');
+        return;
     }
     
-    // Clear cart
-    cart = [];
-    updateCart();
-    updateCartVisibility();
-    saveCartToStorage();
-    cartModal.classList.remove('active');
+    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
-    // Navigate to orders section
-    setActiveSection('orders');
+    // Save cart temporarily for payment callback
+    localStorage.setItem('pendingCart', JSON.stringify(cart));
+    
+    // Initialize Paystack payment
+    const handler = PaystackPop.setup({
+        key: 'pk_test_328d06e1e7acac75cab1175db7c135a8f1697132', // Replace with your Paystack public key
+        email: currentUser.email,
+        amount: Math.round(total * 100), // Convert to kobo
+        currency: 'ZAR',
+        ref: 'MNT' + Date.now(),
+        callback: function(response) {
+            // Payment successful
+            if (response.status === 'success') {
+                // Save order
+                saveOrder();
+                
+                // Clear cart
+                cart = [];
+                updateCart();
+                updateCartVisibility();
+                saveCartToStorage();
+                localStorage.removeItem('pendingCart');
+                
+                cartModal.classList.remove('active');
+                
+                // Show success message
+                const latestOrder = orders.find(order => order.userEmail === currentUser.email);
+                if (latestOrder) {
+                    showToast(`Payment successful! Order placed. Your PIN: ${latestOrder.pin}. Order status: ${latestOrder.status}`);
+                } else {
+                    showToast('Payment successful! Order placed.');
+                }
+                
+                // Navigate to orders section
+                setActiveSection('orders');
+            }
+        },
+        onClose: function() {
+            showToast('Payment cancelled', 'error');
+        }
+    });
+    
+    handler.openIframe();
 });
 
 // Profile edit functionality
@@ -1275,95 +1328,6 @@ function checkDevice() {
         mobileContent.style.display = 'block';
     }
 }
-
-// Check if within operating hours
-function isWithinOperatingHours() {
-    const now = new Date();
-    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    const currentTime = hour + minute / 60;
-    
-    // Operating hours:
-    // Monday-Saturday: 09:00 - 20:00
-    // Sunday & Holidays: 10:00 - 19:00
-    
-    if (day === 0) { // Sunday
-        return currentTime >= 10 && currentTime < 19;
-    } else { // Monday-Saturday
-        return currentTime >= 9 && currentTime < 20;
-    }
-}
-
-// Update checkout function in main.js
-checkoutBtn?.addEventListener('click', () => {
-    if (cart.length === 0) {
-        showToast('Your cart is empty!', 'error');
-        return;
-    }
-    
-    if (!currentUser) {
-        showToast('Login to checkout', 'error');
-        setActiveSection('login');
-        return;
-    }
-    
-    // Check operating hours
-    if (!isWithinOperatingHours()) {
-        const now = new Date();
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        
-        showToast(`Orders can only be placed during operating hours. Today (${dayNames[now.getDay()]}) hours: ${now.getDay() === 0 ? '10:00-19:00' : '09:00-20:00'}`, 'error');
-        return;
-    }
-    
-    // Redirect to Paystack payment
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
-    // Save cart temporarily for payment callback
-    localStorage.setItem('pendingCart', JSON.stringify(cart));
-    
-    // Initialize Paystack payment
-    const handler = PaystackPop.setup({
-        key: 'pk_test_328d06e1e7acac75cab1175db7c135a8f1697132', // Replace with your Paystack public key
-        email: currentUser.email,
-        amount: total * 100, // Convert to kobo
-        currency: 'ZAR',
-        ref: 'MNT' + Date.now(),
-        callback: function(response) {
-            // Payment successful
-            if (response.status === 'success') {
-                // Save order
-                saveOrder();
-                
-                // Clear cart
-                cart = [];
-                updateCart();
-                updateCartVisibility();
-                saveCartToStorage();
-                localStorage.removeItem('pendingCart');
-                
-                cartModal.classList.remove('active');
-                
-                // Show success message
-                const latestOrder = orders.find(order => order.userEmail === currentUser.email && order.timestamp > Date.now() - 1000);
-                if (latestOrder) {
-                    showToast(`Payment successful! Order placed. Your PIN: ${latestOrder.pin}. Order status: ${latestOrder.status}`);
-                } else {
-                    showToast('Payment successful! Order placed.');
-                }
-                
-                // Navigate to orders section
-                setActiveSection('orders');
-            }
-        },
-        onClose: function() {
-            showToast('Payment cancelled', 'error');
-        }
-    });
-    
-    handler.openIframe();
-});
 
 // Initial check and resize listener
 checkDevice();
