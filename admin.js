@@ -497,15 +497,3 @@ window.addEventListener('ordersUpdated', function() {
 
 // Initial check and resize listener
 window.addEventListener('resize', checkDevice);
-
-// Check for new year on page load
-window.addEventListener('load', () => {
-    const currentYear = new Date().getFullYear();
-    const lastResetYear = localStorage.getItem('lastResetYear');
-    
-    if (!lastResetYear || parseInt(lastResetYear) < currentYear) {
-        setTimeout(() => {
-            showConfirmModal('resetYear', null, `A new year (${currentYear}) has started. Reset yearly statistics?`);
-        }, 1000);
-    }
-});
