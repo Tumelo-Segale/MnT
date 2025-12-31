@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="./M&T.png" type="image/x-icon">
+    <link rel="stylesheet" href="./style.css">
+    <script src="./main.js" defer></script>
+    <title>M&T</title>
+</head>
+
+<body>
+    <!-- Desktop Warning -->
+    <div class="desktop-warning" id="desktopWarning">
+        <div class="warning-content">
+            <img src="./M&T.png" alt="M&T Logo" class="warning-logo">
+            <h1>Desktop Not Supported</h1>
+            <p>This platform is optimized for mobile and tablet devices only.<br>
+                Please open on a mobile device or resize your browser window.
+            </p>
+        </div>
+    </div>
+
+    <!-- Mobile Content -->
+    <div class="mobile-content" id="mobileContent">
+        <!-- Fixed Navigation -->
+        <nav id="mainNav">
+            <div class="logo">
+                <img src="./M&T.png" alt="M&T Logo">
+            </div>
+
+            <!-- Hamburger Menu Button -->
+            <button class="hamburger-menu" id="hamburgerBtn" aria-label="Toggle navigation menu">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+        </nav>
+
+        <!-- Sidebar Navigation -->
+        <div class="sidebar" id="sidebar">
+            <ul class="sidebar-nav">
+                <li><a href="#home" class="nav-link" data-section="home">Home</a></li>
+                <li><a href="#menu" class="nav-link" data-section="menu">Menu</a></li>
+                <li><a href="#orders" class="nav-link protected-nav" data-section="orders">Orders</a></li>
+                <li><a href="#contact" class="nav-link" data-section="contact">Contact</a></li>
+                <li><a href="#profile" class="nav-link protected-nav" data-section="profile">Profile</a></li>
+                <li><a href="#login" class="nav-link login-logout" data-section="login">Login</a></li>
+                <li><a href="#help" class="nav-link" data-section="help">Help</a></li>
+            </ul>
+        </div>
+
+        <!-- Overlay for closing sidebar -->
+        <div class="overlay" id="overlay"></div>
+
+        <!-- Cart Icon -->
+        <div class="cart-container" id="cartContainer">
+            <button class="cart-btn" id="cartBtn" aria-label="View cart">
+                <span class="cart-icon">🛒</span>
+                <span class="cart-count" id="cartCount">0</span>
+            </button>
+        </div>
+
+        <!-- Cart Modal -->
+        <div class="cart-modal" id="cartModal">
+            <div class="cart-header">
+                <h3>Your Order</h3>
+                <button class="close-cart" id="closeCart">&times;</button>
+            </div>
+            <div class="cart-items" id="cartItems">
+                <!-- Cart items will be added here dynamically -->
+                <div class="empty-cart">Your cart is empty</div>
+            </div>
+            <div class="cart-footer">
+                <div class="cart-total">
+                    <span>Total:</span>
+                    <span class="total-amount" id="totalAmount">R 0.00</span>
+                </div>
+                <button class="checkout-btn" id="checkoutBtn">Checkout</button>
+            </div>
+        </div>
+
+        <!-- Order Details Modal -->
+        <div class="order-modal" id="orderModal">
+            <div class="order-modal-content">
+                <div class="order-modal-header">
+                    <h3>Order Details</h3>
+                    <button class="close-order-modal" id="closeOrderModal">&times;</button>
+                </div>
+                <div class="order-modal-body" id="orderModalBody">
+                    <!-- Order details will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Edit Modal -->
+        <div class="profile-edit-modal" id="profileEditModal">
+            <div class="profile-edit-modal-content">
+                <div class="profile-edit-modal-header">
+                    <h3>Edit Profile</h3>
+                    <button class="close-profile-edit-modal" id="closeProfileEditModal">&times;</button>
+                </div>
+                <div class="profile-edit-modal-body">
+                    <form class="edit-profile-form" id="editProfileForm">
+                        <div class="edit-form-group">
+                            <label for="editName">Full Name</label>
+                            <input type="text" id="editName" placeholder="Enter your full name" required>
+                        </div>
+                        <div class="edit-form-group">
+                            <label for="editEmail">Email Address</label>
+                            <input type="email" id="editEmail" placeholder="Enter your email" required>
+                        </div>
+                        <div class="edit-form-group">
+                            <label for="editPhone">Phone Number</label>
+                            <input type="tel" id="editPhone" placeholder="Enter your phone number" required>
+                        </div>
+
+                        <div class="password-section">
+                            <h4>Change Password (Optional)</h4>
+                            <div class="edit-form-group">
+                                <label for="currentPassword">Current Password</label>
+                                <input type="password" id="currentPassword" placeholder="Enter current password">
+                            </div>
+                            <div class="edit-form-group">
+                                <label for="newPassword">New Password</label>
+                                <input type="password" id="newPassword" placeholder="Enter new password">
+                            </div>
+                            <div class="edit-form-group">
+                                <label for="confirmPassword">Confirm New Password</label>
+                                <input type="password" id="confirmPassword" placeholder="Confirm new password">
+                            </div>
+                        </div>
+
+                        <div class="edit-form-actions">
+                            <button type="button" class="cancel-edit-btn" id="cancelProfileEdit">Cancel</button>
+                            <button type="button" class="save-profile-btn" id="saveProfileBtn">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation Modal -->
+        <div class="delete-confirm-modal" id="deleteConfirmModal">
+            <div class="delete-confirm-modal-content">
+                <div class="delete-confirm-modal-header">
+                    <h3>Delete Profile</h3>
+                    <button class="close-delete-modal" id="closeDeleteModal">&times;</button>
+                </div>
+                <div class="delete-confirm-modal-body">
+                    <div class="delete-confirm-text">
+                        <p>Are you sure you want to delete your profile?</p>
+                        <p><strong>This action cannot be undone.</strong></p>
+                    </div>
+                    <div class="delete-confirm-actions">
+                        <button type="button" class="cancel-delete-btn" id="cancelDelete">Cancel</button>
+                        <button type="button" class="confirm-delete-btn" id="confirmDelete">Delete Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content area -->
+        <main id="mainContent">
+            <!-- Home Section -->
+            <section id="home" class="page-section active">
+                <!-- Hero Banner -->
+                <div class="hero">
+                    <div class="hero-overlay">
+                        <p>Great food. Warm vibes. Right here in Chaneng.</p>
+                        <div class="hero-buttons">
+                            <a href="#menu" class="hero-btn">View Menu</a>
+                            <a href="#contact" class="hero-btn outline">Contact Us</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-content">
+                    <!-- About -->
+                    <div class="home-about">
+                        <h1>M&T</h1>
+                        <p>
+                            Welcome to <strong>M&T</strong> - the heart of good food in Chaneng.
+                            We proudly serve freshly prepared meals made with care, passion, and quality ingredients.
+                        </p>
+                        <p>
+                            Whether you're stopping by for a quick bite, sharing a meal with family, or meeting friends,
+                            M&T is your go-to spot for delicious food, generous portions, and friendly service.
+                        </p>
+                    </div>
+
+                    <!-- Highlights -->
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <h3>Freshly Prepared</h3>
+                            <p>Every meal is cooked fresh using quality ingredients.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h3>Local Favorites</h3>
+                            <p>Inspired by the meals our community loves most.</p>
+                        </div>
+                        <div class="feature-card">
+                            <h3>Dine-In & Takeaway</h3>
+                            <p>Enjoy your food your way - sit down or grab and go.</p>
+                        </div>
+                    </div>
+
+                    <!-- Operating Hours -->
+                    <div class="hours-card">
+                        <h2>Operating Hours</h2>
+                        <p><strong>Mondays - Sundays:</strong> 09:00 - 20:00</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Menu Section -->
+            <section id="menu" class="page-section">
+                <div class="section-content">
+                    <h1>Our Menu</h1>
+                    <p>Explore our wide selection of delicious meals prepared with care and passion.</p>
+
+                    <!-- Menu Search -->
+                    <div class="menu-search">
+                        <input type="text" id="menuSearch" placeholder="Search menu items...">
+                    </div>
+
+                    <!-- Menu Filters -->
+                    <div class="menu-filters">
+                        <button class="filter-btn active" data-filter="meals">Meals</button>
+                        <button class="filter-btn" data-filter="drinks">Drinks</button>
+                    </div>
+
+                    <!-- Meals Category -->
+                    <div class="menu-category meals active">
+                        <!-- Menu items will be loaded dynamically -->
+                    </div>
+
+                    <!-- Drinks Category -->
+                    <div class="menu-category drinks">
+                        <!-- Menu items will be loaded dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Orders Section -->
+            <section id="orders" class="page-section protected-section">
+                <div class="section-content">
+                    <h1>My Orders</h1>
+                    <p>View your order history and track current orders.</p>
+
+                    <div class="orders-container" id="ordersContainer">
+                        <div class="empty-orders">
+                            <p>No orders have been placed yet.</p>
+                            <a href="#menu" class="hero-btn">Browse Menu</a>
+                        </div>
+                        <!-- Orders will be dynamically added here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- Contact Section -->
+            <section id="contact" class="page-section">
+                <div class="section-content">
+                    <h1>Contact Us</h1>
+                    <p>We'd love to hear from you. Reach out to us.</p>
+
+                    <form class="contact-form">
+                        <h2>Send us a Message</h2>
+                        <div class="form-group">
+                            <input type="text" id="contactName" placeholder="e.g. Sam Smith" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="email" id="contactEmail" placeholder="e.g. samsmith@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <textarea id="contactMessage" placeholder="Your Message" rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">Send Message</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Profile Section -->
+            <section id="profile" class="page-section protected-section">
+                <div class="section-content">
+                    <h1>My Profile</h1>
+                    <p>Manage your account information and preferences.</p>
+
+                    <div class="profile-info" id="profileInfo">
+                        <div class="profile-details">
+                            <p><strong>Name:</strong> <span id="profileName">-</span></p>
+                            <p><strong>Email:</strong> <span id="profileEmail">-</span></p>
+                            <p><strong>Phone:</strong> <span id="profilePhone">-</span></p>
+                        </div>
+
+                        <div class="profile-actions">
+                            <button class="edit-btn" id="editProfileBtn">Edit Profile</button>
+                            <button class="delete-btn" id="deleteProfileBtn">Delete Profile</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Login/Register Section -->
+            <section id="login" class="page-section">
+                <div class="section-content">
+                    <h1 id="formTitle">Login</h1>
+                    <p id="formSubtitle">Access your M&T account to make online orders, view order history, and more.
+                    </p>
+
+                    <!-- Login Form -->
+                    <form class="login-form active-form">
+                        <div class="form-group">
+                            <input type="email" id="loginEmail" placeholder="e.g. samsmith@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" id="loginPassword" placeholder="Password" required>
+                        </div>
+                        <button type="submit" class="submit-btn">Login</button>
+
+                        <div class="form-links">
+                            Don't have an account? <a href="#register" id="showRegister">Sign up</a>
+                        </div>
+                    </form>
+
+                    <!-- Register Form -->
+                    <form class="register-form">
+                        <div class="form-group">
+                            <input type="text" id="registerName" placeholder="e.g. Sam Smith" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="email" id="registerEmail" placeholder="e.g. samsmith@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="tel" id="registerPhone" placeholder="e.g. 0987654321" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" id="registerPassword" placeholder="Password" required>
+                        </div>
+                        <div class="form-group">
+                            <input type="password" id="registerConfirmPassword" placeholder="Confirm Password" required>
+                        </div>
+                        <button type="submit" class="submit-btn">Register</button>
+
+                        <div class="form-links">
+                            Already have an account? <a href="#login" id="showLogin">Login</a>
+                        </div>
+                    </form>
+
+                    <div class="login-benefits">
+                        <h2>Benefits of an Account</h2>
+                        <ul>
+                            <li>Make easy online orders and collections</li>
+                            <li>View order history</li>
+                            <li>Fast checkout process</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Help Section -->
+            <section id="help" class="page-section">
+                <div class="section-content">
+                    <h1>Help & FAQ</h1>
+                    <p>Find answers to common questions and get assistance.</p>
+
+                    <div class="faq-container">
+                        <div class="faq-item">
+                            <h3>How do I place an order?</h3>
+                            <p>Browse the menu, add items to your cart, and proceed to checkout. You'll need to be
+                                logged in to complete your order.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>How does payment work?</h3>
+                            <p>We use Paystack for secure online payments. After checkout, you'll be redirected to
+                                Paystack to complete your payment. Once payment is successful, your order will be
+                                processed immediately.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>How do I track my order?</h3>
+                            <p>After placing an order, you'll receive a 6-digit collection PIN. You can view your
+                                order status and PIN in the "Orders" section. Orders have three statuses:
+                                Pending, Ready, and Completed.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>What are the collection procedures?</h3>
+                            <p>When your order is ready, present your 6-digit PIN at the counter for collection.
+                                The PIN ensures only you can collect your order. Please keep your PIN confidential.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>Can I modify or cancel my order?</h3>
+                            <p>Once an order is placed, it cannot be modified or cancelled as preparation begins
+                                immediately. Please review your order carefully before checkout.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>How to contact customer service?</h3>
+                            <p>Use the contact form on our Contact page, or visit us during operating hours. We
+                                typically respond within 24 hours. For urgent matters, please visit us in person.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>What payment methods are accepted?</h3>
+                            <p>We accept all major debit/credit cards through Paystack. Cash payments are accepted
+                                for in-person orders only.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>How do I update my account information?</h3>
+                            <p>Go to the Profile section to update your personal details and change your password.
+                                Your updated login credentials will take effect immediately.</p>
+                        </div>
+
+                        <div class="faq-item">
+                            <h3>What if I forget my collection PIN?</h3>
+                            <p>Your PIN is displayed in the order details in the "Orders" section. If you cannot
+                                access your account, please visit us with your order ID and email verification.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer id="mainFooter">
+            <p>&copy; 2025 M&T. All rights reserved.</p>
+        </footer>
+
+        <!-- Success Message Toast -->
+        <div class="toast" id="toast"></div>
+    </div>
+</body>
+
+</html>

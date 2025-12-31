@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="./M&T.png" type="image/x-icon">
+    <link rel="stylesheet" href="./admin.css">
+    <script src="./admin.js" defer></script>
+    <title>M&T - Admin</title>
+</head>
+
+<body>
+    <!-- Desktop Warning -->
+    <div class="desktop-warning" id="desktopWarning">
+        <div class="warning-content">
+            <img src="./M&T.png" alt="M&T Logo" class="warning-logo">
+            <h1>Desktop Not Supported</h1>
+            <p>This platform is optimized for mobile and tablet devices only.<br>
+                Please open on a mobile device or resize your browser window.
+            </p>
+        </div>
+    </div>
+
+    <!-- Mobile Content -->
+    <div class="mobile-content" id="mobileContent">
+        <!-- Fixed Navigation -->
+        <nav id="mainNav">
+            <div class="logo">
+                <img src="./M&T.png" alt="M&T Logo">
+            </div>
+
+            <!-- Hamburger Menu Button -->
+            <button class="hamburger-menu" id="hamburgerBtn" aria-label="Toggle navigation menu">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+        </nav>
+
+        <!-- Sidebar Navigation -->
+        <div class="sidebar" id="sidebar">
+            <ul class="sidebar-nav">
+                <li><a href="#dashboard" class="nav-link" data-section="dashboard">Dashboard</a></li>
+                <li><a href="#orders" class="nav-link" data-section="orders">Orders</a></li>
+                <li><a href="#details" class="nav-link" data-section="details">Details</a></li>
+                <li><a href="#logout" class="nav-link" id="logoutLink">Logout</a></li>
+            </ul>
+        </div>
+
+        <!-- Overlay for closing sidebar -->
+        <div class="overlay" id="overlay"></div>
+
+        <!-- Main content area -->
+        <main id="mainContent">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="page-section active">
+                <div class="section-content">
+                    <h1>Admin Dashboard</h1>
+                    <p>Monitor and Manage all restaurant operations.</p>
+
+                    <!-- Stats Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Total Revenue</h3>
+                            <div class="stat-number" id="totalRevenue">R0</div>
+                            <div class="stat-label">All time revenue</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Completed Orders</h3>
+                            <div class="stat-number" id="completedOrders">0</div>
+                            <div class="stat-label">Total completed orders</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Profit</h3>
+                            <div class="stat-number" id="totalProfit">R0</div>
+                            <div class="stat-label">5% transaction profit</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>This Year's Revenue</h3>
+                            <div class="stat-number" id="yearRevenue">R0</div>
+                            <div class="stat-label">Current year only</div>
+                        </div>
+                    </div>
+
+                    <!-- Download Statement -->
+                    <div class="download-section">
+                        <h3>Annual Statement</h3>
+                        <p>Download complete order data for the current year</p>
+                        <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Orders Section -->
+            <section id="orders" class="page-section">
+                <div class="section-content">
+                    <h1>Completed Orders</h1>
+                    <p>View all completed customer orders.</p>
+
+                    <!-- Order Search -->
+                    <div class="order-search">
+                        <input type="text" id="orderSearch" placeholder="Search by Order ID...">
+                    </div>
+
+                    <!-- Orders Container -->
+                    <div class="orders-container" id="ordersContainer">
+                        <div class="empty-state">
+                            <p>No completed orders found</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Details Section -->
+            <section id="details" class="page-section">
+                <div class="section-content">
+                    <h1>Admin Details</h1>
+                    <p>Update your login credentials.</p>
+
+                    <!-- Admin Info Form -->
+                    <form class="admin-form" id="adminForm">
+                        <h2>Login Details</h2>
+                        <div class="form-group">
+                            <label for="currentAdminEmail">Current Email Address</label>
+                            <input type="email" id="currentAdminEmail" placeholder="Current email" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="newAdminEmail">New Email Address</label>
+                            <input type="email" id="newAdminEmail" placeholder="Enter new email">
+                        </div>
+                        <div class="form-group">
+                            <label for="currentAdminPassword">Current Password</label>
+                            <input type="password" id="currentAdminPassword" placeholder="Enter current password">
+                        </div>
+                        <div class="form-group">
+                            <label for="newAdminPassword">New Password</label>
+                            <input type="password" id="newAdminPassword" placeholder="Enter new password">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmAdminPassword">Confirm New Password</label>
+                            <input type="password" id="confirmAdminPassword" placeholder="Confirm new password">
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" id="cancelChanges">Cancel</button>
+                            <button type="submit" class="save-btn">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Logout Confirmation Modal -->
+            <div class="confirm-modal" id="confirmModal">
+                <div class="confirm-modal-content">
+                    <div class="confirm-modal-header">
+                        <h3>Confirm Logout</h3>
+                        <button class="close-confirm-modal" id="closeConfirmModal">&times;</button>
+                    </div>
+                    <div class="confirm-modal-body">
+                        <p id="confirmMessage">Are you sure you want to logout?</p>
+                    </div>
+                    <div class="confirm-modal-footer">
+                        <button type="button" class="cancel-confirm-btn" id="cancelConfirm">Cancel</button>
+                        <button type="button" class="delete-btn" id="confirmAction">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer id="mainFooter">
+            <p>&copy; 2025 M&T. All rights reserved.</p>
+        </footer>
+
+        <!-- Success Message Toast -->
+        <div class="toast" id="toast"></div>
+    </div>
+</body>
+
+</html>
