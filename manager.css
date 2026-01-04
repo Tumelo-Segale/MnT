@@ -842,6 +842,13 @@ nav {
   padding: 20px;
 }
 
+.confirm-modal-footer {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
 .order-details-modal-footer,
 .pin-modal-footer {
   padding: 16px;

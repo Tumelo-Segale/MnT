@@ -181,6 +181,12 @@ const closeDeleteModal = document.getElementById('closeDeleteModal');
 const cancelDelete = document.getElementById('cancelDelete');
 const confirmDelete = document.getElementById('confirmDelete');
 
+// Logout confirmation modal for customer site
+const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+const closeLogoutModal = document.getElementById('closeLogoutModal');
+const cancelLogout = document.getElementById('cancelLogout');
+const confirmLogout = document.getElementById('confirmLogout');
+
 // Toast element
 const toast = document.getElementById('toast');
 
@@ -190,6 +196,67 @@ let currentUser = safeStorage.getJSON('currentUser') || null;
 let orders = safeStorage.getJSON('orders') || [];
 let menuItems = safeStorage.getJSON('menuItems') || [];
 let contactMessages = safeStorage.getJSON('contactMessages') || [];
+
+// Initialize default data if not exists
+function initializeDefaultData() {
+    // Initialize users array if not exists
+    let users = safeStorage.getJSON('users');
+    if (!users || !Array.isArray(users)) {
+        users = [];
+        safeStorage.setJSON('users', users);
+    }
+    
+    // Initialize menu items if not exists
+    if (!menuItems || !Array.isArray(menuItems)) {
+        menuItems = [
+            {
+                id: 1,
+                name: "Chicken Burger",
+                description: "Juicy chicken patty with fresh lettuce and special sauce",
+                price: 129.99,
+                category: "meals",
+                active: true
+            },
+            {
+                id: 2,
+                name: "Beef Burger",
+                description: "Classic beef patty with cheese and vegetables",
+                price: 139.99,
+                category: "meals",
+                active: true
+            },
+            {
+                id: 3,
+                name: "Coca-Cola",
+                description: "Refreshing cold drink",
+                price: 25.00,
+                category: "drinks",
+                active: true
+            },
+            {
+                id: 4,
+                name: "Fanta",
+                description: "Orange flavored soda",
+                price: 25.00,
+                category: "drinks",
+                active: true
+            }
+        ];
+        safeStorage.setJSON('menuItems', menuItems);
+    }
+    
+    // Initialize orders if not exists
+    if (!orders || !Array.isArray(orders)) {
+        orders = [];
+        safeStorage.setJSON('orders', orders);
+    }
+    
+    // Initialize contact messages if not exists
+    if (!contactMessages || !Array.isArray(contactMessages)) {
+        contactMessages = [];
+        safeStorage.setJSON('contactMessages', contactMessages);
+    }
+}
 
 // Show toast message
 function showToast(message, type = 'success') {
@@ -257,7 +324,6 @@ function getStatusClass(status) {
 // Check if within operating hours
 function isWithinOperatingHours() {
     const now = new Date();
-    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     const hours = now.getHours();
     const minutes = now.getMinutes();
     const currentTime = hours + (minutes / 60);
@@ -267,17 +333,26 @@ function isWithinOperatingHours() {
 }
 
 // Check user type and redirect if needed
+// In the checkUserTypeAndRedirect function:
 function checkUserTypeAndRedirect() {
     if (!currentUser) return false;
     
     // Check if user is manager
     if (currentUser.email === 'manager@mnt.com' && currentUser.password === 'manager123') {
+        // Clear current user from localStorage
+        safeStorage.removeItem('currentUser');
+        // Set manager flag and redirect
+        sessionStorage.setItem('isManager', 'true');
         window.location.href = 'manager.html';
         return true;
     }
     
     // Check if user is admin
     if (currentUser.email === 'admin@admin.com' && currentUser.password === 'admin123') {
+        // Clear current user from localStorage
+        safeStorage.removeItem('currentUser');
+        // Set admin flag and redirect
+        sessionStorage.setItem('isAdmin', 'true');
         window.location.href = 'admin.html';
         return true;
     }
@@ -299,7 +374,7 @@ function displayOrders() {
         return;
     }
     
-    const userOrders = orders.filter(order => order.userEmail === currentUser.email);
+    const userOrders = Array.isArray(orders) ? orders.filter(order => order.userEmail === currentUser.email) : [];
     
     if (userOrders.length === 0) {
         ordersContainer.innerHTML = `
@@ -423,7 +498,7 @@ function updateContactForm() {
     }
 }
 
-// Update the displayMenuItems function to ensure it only shows available items
+// Display menu items
 function displayMenuItems() {
     const mealsContainer = document.querySelector('.menu-category.meals');
     const drinksContainer = document.querySelector('.menu-category.drinks');
@@ -435,7 +510,7 @@ function displayMenuItems() {
     drinksContainer.innerHTML = '';
     
     // Filter active menu items (only those with active: true)
-    const activeMenuItems = menuItems.filter(item => item.active === true);
+    const activeMenuItems = Array.isArray(menuItems) ? menuItems.filter(item => item.active === true) : [];
     
     // Display meals
     const meals = activeMenuItems.filter(item => item.category === 'meals');
@@ -618,6 +693,12 @@ function handleNavClick(e) {
     e.preventDefault();
     const targetId = this.getAttribute('href').substring(1);
     
+    if (targetId === 'logout') {
+        showLogoutConfirmModal();
+        closeSidebar();
+        return;
+    }
+    
     // Set active section
     setActiveSection(targetId);
     
@@ -637,13 +718,29 @@ function handleNavClick(e) {
     }
 }
 
+// Show logout confirmation modal
+function showLogoutConfirmModal() {
+    if (logoutConfirmModal) {
+        logoutConfirmModal.classList.add('active');
+    }
+}
+
+// Close logout confirmation modal
+function closeLogoutConfirmModal() {
+    if (logoutConfirmModal) {
+        logoutConfirmModal.classList.remove('active');
+    }
+}
+
 // Handle logout
-function handleLogout(e) {
-    e.preventDefault();
-    
+function handleLogout() {
     // Clear current user
     currentUser = null;
     safeStorage.removeItem('currentUser');
+    
+    // Clear session flags
+    sessionStorage.removeItem('isManager');
+    sessionStorage.removeItem('isAdmin');
     
     // Clear cart
     cart = [];
@@ -654,6 +751,7 @@ function handleLogout(e) {
     setActiveSection('home');
     closeSidebar();
     window.location.hash = 'home';
+    closeLogoutConfirmModal();
 }
 
 // Show login/register form
@@ -724,8 +822,12 @@ function saveProfileChanges() {
         return;
     }
     
-    // Get users from storage
-    const users = safeStorage.getJSON('users') || [];
+    // Get users from storage - ensure it's an array
+    let users = safeStorage.getJSON('users');
+    if (!users || !Array.isArray(users)) {
+        users = [];
+    }
+    
     const userIndex = users.findIndex(u => u.email === currentUser.email);
     
     if (userIndex === -1) {
@@ -808,7 +910,11 @@ function closeDeleteConfirmModal() {
 function deleteUserProfile() {
     if (!currentUser) return;
     
-    const users = safeStorage.getJSON('users') || [];
+    let users = safeStorage.getJSON('users');
+    if (!users || !Array.isArray(users)) {
+        users = [];
+    }
+    
     const updatedUsers = users.filter(u => u.email !== currentUser.email);
     
     // Remove user from storage
@@ -1111,6 +1217,10 @@ function saveOrder() {
         status: 'pending'
     };
     
+    if (!Array.isArray(orders)) {
+        orders = [];
+    }
+    
     orders.unshift(order);
     safeStorage.setJSON('orders', orders);
     
@@ -1134,6 +1244,10 @@ function saveContactMessage(name, email, message) {
         message: message,
         read: false
     };
+    
+    if (!Array.isArray(contactMessages)) {
+        contactMessages = [];
+    }
     
     contactMessages.unshift(contactMessage);
     safeStorage.setJSON('contactMessages', contactMessages);
@@ -1161,6 +1275,21 @@ document.addEventListener('keydown', (e) => {
 
 // Handle initial page load based on URL hash
 function handleInitialLoad() {
+    // Initialize default data
+    initializeDefaultData();
+    
+    // Check if user is trying to access staff pages from customer site
+    if (sessionStorage.getItem('isManager') === 'true') {
+        sessionStorage.removeItem('isManager');
+        window.location.href = 'manager.html';
+        return;
+    }
+    
+    if (sessionStorage.getItem('isAdmin') === 'true') {
+        sessionStorage.removeItem('isAdmin');
+        window.location.href = 'admin.html';
+        return;
+    }
     
     // Load data from storage
     menuItems = safeStorage.getJSON('menuItems') || [];
@@ -1175,7 +1304,7 @@ function handleInitialLoad() {
     const validSections = ['home', 'menu', 'orders', 'contact', 'profile', 'login', 'help'];
     
     if (hash === 'logout') {
-        handleLogout(new Event('click'));
+        showLogoutConfirmModal();
         return;
     }
     
@@ -1194,7 +1323,7 @@ window.addEventListener('hashchange', () => {
     const validSections = ['home', 'menu', 'orders', 'contact', 'profile', 'login', 'help'];
     
     if (hash === 'logout') {
-        handleLogout(new Event('click'));
+        showLogoutConfirmModal();
         return;
     }
     
@@ -1248,8 +1377,12 @@ document.querySelectorAll('form').forEach(form => {
             const email = document.getElementById('loginEmail')?.value || '';
             const password = document.getElementById('loginPassword')?.value || '';
             
-            // Check credentials
-            const users = safeStorage.getJSON('users') || [];
+            // Check credentials - ensure users is an array
+            let users = safeStorage.getJSON('users');
+            if (!users || !Array.isArray(users)) {
+                users = [];
+            }
+            
             const user = users.find(u => u.email === email && u.password === password);
             
             if (user) {
@@ -1306,8 +1439,12 @@ document.querySelectorAll('form').forEach(form => {
                 return;
             }
             
-            // Check if user already exists
-            const users = safeStorage.getJSON('users') || [];
+            // Check if user already exists - ensure users is an array
+            let users = safeStorage.getJSON('users');
+            if (!users || !Array.isArray(users)) {
+                users = [];
+            }
+            
             if (users.some(u => u.email === email)) {
                 showToast('Email already registered', 'error');
                 return;
@@ -1322,7 +1459,7 @@ document.querySelectorAll('form').forEach(form => {
             // Create new user
             const newUser = { name, email, phone, password };
             users.push(newUser);
-            safeStorage.setJSON('users', JSON.stringify(users));
+            safeStorage.setJSON('users', users);
             
             // Auto login
             currentUser = newUser;
@@ -1448,6 +1585,20 @@ if (deleteConfirmModal) deleteConfirmModal.addEventListener('click', (e) => {
 // Confirm delete
 if (confirmDelete) confirmDelete.addEventListener('click', deleteUserProfile);
 
+// Logout confirmation modal functionality
+if (closeLogoutModal) closeLogoutModal.addEventListener('click', closeLogoutConfirmModal);
+if (cancelLogout) cancelLogout.addEventListener('click', closeLogoutConfirmModal);
+
+// Close logout modal when clicking outside
+if (logoutConfirmModal) logoutConfirmModal.addEventListener('click', (e) => {
+    if (e.target === logoutConfirmModal) {
+        closeLogoutConfirmModal();
+    }
+});
+
+// Confirm logout
+if (confirmLogout) confirmLogout.addEventListener('click', handleLogout);
+
 // Close modals with escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1459,6 +1610,9 @@ document.addEventListener('keydown', (e) => {
         }
         if (deleteConfirmModal && deleteConfirmModal.classList.contains('active')) {
             closeDeleteConfirmModal();
+        }
+        if (logoutConfirmModal && logoutConfirmModal.classList.contains('active')) {
+            closeLogoutConfirmModal();
         }
     }
 });

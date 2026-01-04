@@ -1,10 +1,30 @@
+// Check if user is manager
+function checkManagerAccess() {
+    // Check session storage for manager flag
+    const isManager = sessionStorage.getItem('isManager') === 'true';
+    
+    if (!isManager) {
+        // Check if current user is manager
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (currentUser && currentUser.email === 'manager@mnt.com' && currentUser.password === 'manager123') {
+            sessionStorage.setItem('isManager', 'true');
+            return true;
+        }
+        
+        // Redirect to main site if not manager
+        window.location.href = 'index.html';
+        return false;
+    }
+    
+    return true;
+}
+
 // Get DOM elements
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('overlay');
 const navLinks = document.querySelectorAll('.nav-link');
 const sections = document.querySelectorAll('.page-section');
-const logoutLink = document.getElementById('logoutLink');
 
 // Dashboard elements
 const todayOrders = document.getElementById('todayOrders');
@@ -130,18 +150,6 @@ function getStatusClass(status) {
         default:
             return 'status-pending';
     }
-}
-
-// Check if within operating hours
-function isWithinOperatingHours() {
-    const now = new Date();
-    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const currentTime = hours + (minutes / 60);
-    
-    // Monday - Sunday: 09:00 - 20:00 (as per home page)
-    return currentTime >= 9 && currentTime < 20;
 }
 
 // Load orders from main app
@@ -829,7 +837,7 @@ function downloadStatement() {
     
     // Add header
     csvContent += "Year,Total Completed Orders,Total Revenue\n";
-    csvContent += `${currentYear},${yearlyStats.orders},${yearlyStats.revenue}\n\n`;
+    csvContent += `${currentYear},${yearlyStats.orders},R${yearlyStats.revenue}\n\n`;
     
     // Add table header
     csvContent += "Date,Order ID,Order Amount\n";
@@ -837,14 +845,14 @@ function downloadStatement() {
     // Add order data
     yearlyOrders.forEach(order => {
         const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
-        csvContent += `${date},${order.orderId || 'Unknown'},${order.total || 0}\n`;
+        csvContent += `${date},${order.orderId || 'Unknown'},R${order.total || 0}\n`;
     });
     
     // Create download link
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `M&T_Manager_Statement_${currentYear}.csv`);
+    link.setAttribute("download", `M&T_${currentYear}_Statement.csv`);
     document.body.appendChild(link);
     
     // Trigger download
@@ -869,6 +877,8 @@ function handleConfirmedAction() {
             deleteItem(currentActionData);
             break;
         case 'logout':
+            // Clear session storage
+            sessionStorage.removeItem('isManager');
             // Clear current user from localStorage
             localStorage.removeItem('currentUser');
             // Redirect to main site
@@ -949,6 +959,9 @@ function handleNavClick(e) {
 
 // Initialize
 function initialize() {
+    // Check manager access
+    if (!checkManagerAccess()) return;
+    
     // Load initial data
     loadOrders();
     updateDashboardStats();

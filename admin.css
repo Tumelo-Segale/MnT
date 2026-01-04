@@ -544,7 +544,6 @@ nav {
 
 .confirm-modal-footer {
   padding: 16px;
-  border-top: 1px solid #eee;
   display: flex;
   justify-content: center;
   gap: 12px;

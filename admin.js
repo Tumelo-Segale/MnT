@@ -1,3 +1,24 @@
+// Check if user is admin
+function checkAdminAccess() {
+    // Check session storage for admin flag
+    const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+    
+    if (!isAdmin) {
+        // Check if current user is admin
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (currentUser && currentUser.email === 'admin@admin.com' && currentUser.password === 'admin123') {
+            sessionStorage.setItem('isAdmin', 'true');
+            return true;
+        }
+        
+        // Redirect to main site if not admin
+        window.location.href = 'index.html';
+        return false;
+    }
+    
+    return true;
+}
+
 // Get DOM elements
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
@@ -76,18 +97,6 @@ function formatCurrency(amount) {
 // Calculate 5% profit
 function calculateProfit(amount) {
     return parseFloat((amount * 0.05).toFixed(2));
-}
-
-// Check if within operating hours
-function isWithinOperatingHours() {
-    const now = new Date();
-    const day = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const currentTime = hours + (minutes / 60);
-    
-    // Monday - Sunday: 09:00 - 20:00 (as per home page)
-    return currentTime >= 9 && currentTime < 20;
 }
 
 // Load orders from main app
@@ -291,13 +300,13 @@ function showLogoutConfirmModal() {
     confirmModal.classList.add('active');
     
     // Set up confirm action
-    confirmAction.onclick = () => {
-        handleLogout();
-    };
+    confirmAction.onclick = handleConfirmedLogout;
 }
 
 // Handle logout
-function handleLogout() {
+function handleConfirmedLogout() {
+    // Clear session storage
+    sessionStorage.removeItem('isAdmin');
     // Clear current user from localStorage
     localStorage.removeItem('currentUser');
     // Redirect to main site
@@ -368,6 +377,9 @@ function handleNavClick(e) {
 
 // Initialize
 function initialize() {
+    // Check admin access
+    if (!checkAdminAccess()) return;
+    
     // Load initial data
     loadOrders();
     updateDashboardStats();
