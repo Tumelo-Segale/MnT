@@ -118,7 +118,7 @@ function showToast(message, type = 'success') {
     if (!toast) return;
     
     toast.textContent = message;
-    toast.style.background = type === 'success' ? '#28a745' : '#dc3545';
+    toast.style.background = type === 'success' ? '#28a745' : '#b22222';
     toast.style.display = 'block';
     
     setTimeout(() => {
