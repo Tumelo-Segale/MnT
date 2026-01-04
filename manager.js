@@ -19,6 +19,52 @@ function checkManagerAccess() {
     return true;
 }
 
+// Safe localStorage wrapper
+const safeStorage = {
+    getItem: function(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.error('Error getting from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setItem: function(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.error('Error setting to localStorage:', e);
+        }
+    },
+    
+    removeItem: function(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            console.error('Error removing from localStorage:', e);
+        }
+    },
+    
+    getJSON: function(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.error('Error parsing JSON from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setJSON: function(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error('Error stringifying JSON to localStorage:', e);
+        }
+    }
+};
+
 // Get DOM elements
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
@@ -90,14 +136,14 @@ const pinError = document.getElementById('pinError');
 const toast = document.getElementById('toast');
 
 // State
-let managerData = JSON.parse(localStorage.getItem('managerData')) || {
+let managerData = safeStorage.getJSON('managerData') || {
     email: 'manager@mnt.com',
     password: 'manager123',
     name: 'Manager'
 };
 
-let items = JSON.parse(localStorage.getItem('managerItems')) || [];
-let messages = JSON.parse(localStorage.getItem('contactMessages')) || [];
+let items = safeStorage.getJSON('managerItems') || [];
+let messages = safeStorage.getJSON('contactMessages') || [];
 let currentOrders = [];
 let editingItemId = null;
 let currentAction = null;
@@ -105,7 +151,7 @@ let currentActionData = null;
 let currentOrderForPin = null;
 let currentOrderForDetails = null;
 let currentFilterStatus = 'pending';
-let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {
+let yearlyStats = safeStorage.getJSON('managerYearlyStats') || {
     year: new Date().getFullYear(),
     revenue: 0,
     orders: 0
@@ -113,6 +159,8 @@ let yearlyStats = JSON.parse(localStorage.getItem('managerYearlyStats')) || {
 
 // Show toast message
 function showToast(message, type = 'success') {
+    if (!toast) return;
+    
     toast.textContent = message;
     toast.style.background = type === 'success' ? '#28a745' : '#dc3545';
     toast.style.display = 'block';
@@ -124,13 +172,20 @@ function showToast(message, type = 'success') {
 
 // Format date to DD MMM YYYY
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    const day = date.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${day} ${month} ${year}`;
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'Invalid date';
+        
+        const day = date.getDate();
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = monthNames[date.getMonth()];
+        const year = date.getFullYear();
+        
+        return `${day} ${month} ${year}`;
+    } catch (e) {
+        console.error('Error formatting date:', e);
+        return 'Unknown date';
+    }
 }
 
 // Format currency
@@ -158,7 +213,7 @@ function loadOrders() {
     currentOrders = [];
     
     // Load orders from localStorage
-    let customerOrders = JSON.parse(localStorage.getItem('orders')) || [];
+    let customerOrders = safeStorage.getJSON('orders') || [];
     
     // Ensure all orders have proper status (convert to lowercase if needed)
     currentOrders = customerOrders.map(order => {
@@ -196,10 +251,12 @@ function updateDashboardStats() {
     const ordersChange = yesterdayOrdersCount > 0 ? 
         Math.round(((todayOrdersCount - yesterdayOrdersCount) / yesterdayOrdersCount) * 100) : 0;
     
-    todayOrders.textContent = todayOrdersCount;
-    todayOrdersChange.textContent = 
-        `${ordersChange >= 0 ? '+' : ''}${ordersChange}% from yesterday`;
-    todayOrdersChange.className = `stat-change ${ordersChange < 0 ? 'negative' : ''}`;
+    if (todayOrders) todayOrders.textContent = todayOrdersCount;
+    if (todayOrdersChange) {
+        todayOrdersChange.textContent = 
+            `${ordersChange >= 0 ? '+' : ''}${ordersChange}% from yesterday`;
+        todayOrdersChange.className = `stat-change ${ordersChange < 0 ? 'negative' : ''}`;
+    }
     
     // Today's revenue
     const todayRevenueAmount = currentOrders
@@ -213,29 +270,31 @@ function updateDashboardStats() {
     const revenueChangePercent = yesterdayRevenueAmount > 0 ? 
         Math.round(((todayRevenueAmount - yesterdayRevenueAmount) / yesterdayRevenueAmount) * 100) : 0;
     
-    todayRevenue.textContent = formatCurrency(todayRevenueAmount);
-    todayRevenueChange.textContent = 
-        `${revenueChangePercent >= 0 ? '+' : ''}${revenueChangePercent}% from yesterday`;
-    todayRevenueChange.className = `stat-change ${revenueChangePercent < 0 ? 'negative' : ''}`;
+    if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
+    if (todayRevenueChange) {
+        todayRevenueChange.textContent = 
+            `${revenueChangePercent >= 0 ? '+' : ''}${revenueChangePercent}% from yesterday`;
+        todayRevenueChange.className = `stat-change ${revenueChangePercent < 0 ? 'negative' : ''}`;
+    }
     
     // Pending orders
     const pendingCount = currentOrders.filter(order => 
         order.status === 'pending'
     ).length;
-    pendingOrders.textContent = pendingCount;
+    if (pendingOrders) pendingOrders.textContent = pendingCount;
     
     // Completed orders
     const completedOrdersCount = currentOrders.filter(order => 
         order.status === 'completed'
     ).length;
-    completedOrders.textContent = completedOrdersCount;
+    if (completedOrders) completedOrders.textContent = completedOrdersCount;
     
     // Total revenue
     const allTimeRevenue = currentOrders
         .filter(order => order.status === 'completed')
         .reduce((sum, order) => sum + (order.total || 0), 0);
     
-    totalRevenue.textContent = formatCurrency(allTimeRevenue);
+    if (totalRevenue) totalRevenue.textContent = formatCurrency(allTimeRevenue);
     
     // Current year revenue
     const yearlyOrders = currentOrders.filter(order => 
@@ -244,7 +303,7 @@ function updateDashboardStats() {
     );
     
     const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    yearRevenue.textContent = formatCurrency(yearlyRevenue);
+    if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenue);
     
     // Update yearly stats
     yearlyStats = {
@@ -253,7 +312,7 @@ function updateDashboardStats() {
         orders: yearlyOrders.length
     };
     
-    localStorage.setItem('managerYearlyStats', JSON.stringify(yearlyStats));
+    safeStorage.setJSON('managerYearlyStats', yearlyStats);
 }
 
 // Search orders
@@ -268,6 +327,8 @@ function searchOrders(searchTerm) {
 
 // Display filtered orders
 function displayFilteredOrders(filteredOrders) {
+    if (!ordersContainer) return;
+    
     ordersContainer.innerHTML = '';
     
     if (filteredOrders.length === 0) {
@@ -341,7 +402,7 @@ function displayFilteredOrders(filteredOrders) {
 // Display all orders
 function displayAllOrders(status = 'pending') {
     currentFilterStatus = status;
-    const searchTerm = orderSearch.value.trim();
+    const searchTerm = orderSearch ? orderSearch.value.trim() : '';
     
     if (searchTerm) {
         searchOrders(searchTerm);
@@ -355,6 +416,8 @@ function displayAllOrders(status = 'pending') {
 function showOrderDetails(order) {
     currentOrderForDetails = order;
     const statusClass = getStatusClass(order.status || 'pending');
+    
+    if (!orderDetailsBody || !orderDetailsFooter) return;
     
     orderDetailsBody.innerHTML = `
         <div class="order-details-info">
@@ -422,7 +485,7 @@ function showOrderDetails(order) {
         const closeBtn = document.getElementById('closeOrderDetailsBtn');
         if (closeBtn) {
             closeBtn.addEventListener('click', () => {
-                orderDetailsModal.classList.remove('active');
+                if (orderDetailsModal) orderDetailsModal.classList.remove('active');
             });
         }
         
@@ -430,7 +493,7 @@ function showOrderDetails(order) {
         if (markAsReadyBtn) {
             markAsReadyBtn.addEventListener('click', () => {
                 updateOrderStatus(order.id, 'ready');
-                orderDetailsModal.classList.remove('active');
+                if (orderDetailsModal) orderDetailsModal.classList.remove('active');
             });
         }
         
@@ -438,41 +501,45 @@ function showOrderDetails(order) {
         if (markAsCompleteBtn) {
             markAsCompleteBtn.addEventListener('click', () => {
                 showPinVerification(order);
-                orderDetailsModal.classList.remove('active');
+                if (orderDetailsModal) orderDetailsModal.classList.remove('active');
             });
         }
     }, 100);
     
-    orderDetailsModal.classList.add('active');
+    if (orderDetailsModal) orderDetailsModal.classList.add('active');
 }
 
 // Show PIN verification modal
 function showPinVerification(order) {
     currentOrderForPin = order;
-    pinInput.value = '';
-    pinError.style.display = 'none';
-    pinModal.classList.add('active');
+    if (pinInput) pinInput.value = '';
+    if (pinError) pinError.style.display = 'none';
+    if (pinModal) pinModal.classList.add('active');
 }
 
 // Verify PIN and update order status
 function verifyOrderPin() {
-    const enteredPin = pinInput.value;
+    const enteredPin = pinInput ? pinInput.value : '';
     
     if (enteredPin.length !== 6) {
-        pinError.textContent = 'PIN must be 6 digits';
-        pinError.style.display = 'block';
+        if (pinError) {
+            pinError.textContent = 'PIN must be 6 digits';
+            pinError.style.display = 'block';
+        }
         return;
     }
     
     if (enteredPin !== currentOrderForPin.pin) {
-        pinError.textContent = 'Incorrect PIN. Please try again.';
-        pinError.style.display = 'block';
+        if (pinError) {
+            pinError.textContent = 'Incorrect PIN. Please try again.';
+            pinError.style.display = 'block';
+        }
         return;
     }
     
     // Update order status
     updateOrderStatus(currentOrderForPin.id, 'completed');
-    pinModal.classList.remove('active');
+    if (pinModal) pinModal.classList.remove('active');
     showToast('Order marked as complete');
     currentOrderForPin = null;
 }
@@ -502,15 +569,15 @@ function updateOrderStatus(orderId, newStatus) {
         currentOrders[orderIndex].status = newStatus;
         
         // Update in main app orders (localStorage)
-        const mainOrders = JSON.parse(localStorage.getItem('orders')) || [];
+        const mainOrders = safeStorage.getJSON('orders') || [];
         const mainOrderIndex = mainOrders.findIndex(o => o.id === orderId);
         if (mainOrderIndex !== -1) {
             mainOrders[mainOrderIndex].status = newStatus;
-            localStorage.setItem('orders', JSON.stringify(mainOrders));
+            safeStorage.setJSON('orders', mainOrders);
         } else {
             // If not found in main orders, add it
             mainOrders.push(currentOrders[orderIndex]);
-            localStorage.setItem('orders', JSON.stringify(mainOrders));
+            safeStorage.setJSON('orders', mainOrders);
         }
         
         updateDashboardStats();
@@ -530,6 +597,8 @@ function updateRealTimeOrders() {
 
 // Display menu items
 function displayMenuItems(filter = 'meals') {
+    if (!itemsGrid) return;
+    
     itemsGrid.innerHTML = '';
     
     let filteredItems = [...items];
@@ -595,38 +664,40 @@ function displayMenuItems(filter = 'meals') {
 // Show add item modal
 function showAddItemModal() {
     editingItemId = null;
-    itemModalTitle.textContent = 'Add New Item';
-    itemForm.reset();
-    document.getElementById('itemAvailable').checked = true;
-    itemCategory.value = 'meals';
+    if (itemModalTitle) itemModalTitle.textContent = 'Add New Item';
+    if (itemForm) itemForm.reset();
+    if (document.getElementById('itemAvailable')) document.getElementById('itemAvailable').checked = true;
+    if (itemCategory) itemCategory.value = 'meals';
     updateDescriptionField();
-    itemModal.classList.add('active');
+    if (itemModal) itemModal.classList.add('active');
 }
 
 // Show edit item modal
 function showEditItemModal(item) {
     editingItemId = item.id;
-    itemModalTitle.textContent = 'Edit Item';
+    if (itemModalTitle) itemModalTitle.textContent = 'Edit Item';
     
-    document.getElementById('itemName').value = item.name;
-    itemDescription.value = item.description || '';
-    document.getElementById('itemPrice').value = item.price;
-    itemCategory.value = item.category;
-    document.getElementById('itemAvailable').checked = item.available;
+    if (document.getElementById('itemName')) document.getElementById('itemName').value = item.name;
+    if (itemDescription) itemDescription.value = item.description || '';
+    if (document.getElementById('itemPrice')) document.getElementById('itemPrice').value = item.price;
+    if (itemCategory) itemCategory.value = item.category;
+    if (document.getElementById('itemAvailable')) document.getElementById('itemAvailable').checked = item.available;
     
     updateDescriptionField();
-    itemModal.classList.add('active');
+    if (itemModal) itemModal.classList.add('active');
 }
 
 // Update description field based on category
 function updateDescriptionField() {
-    const category = itemCategory.value;
+    const category = itemCategory ? itemCategory.value : 'meals';
     
-    if (category === 'drinks') {
-        descriptionGroup.style.display = 'none';
-        itemDescription.value = '';
-    } else {
-        descriptionGroup.style.display = 'block';
+    if (descriptionGroup) {
+        if (category === 'drinks') {
+            descriptionGroup.style.display = 'none';
+            if (itemDescription) itemDescription.value = '';
+        } else {
+            descriptionGroup.style.display = 'block';
+        }
     }
 }
 
@@ -653,12 +724,12 @@ function saveItem(formData) {
     }
     
     // Save to localStorage
-    localStorage.setItem('managerItems', JSON.stringify(items));
+    safeStorage.setJSON('managerItems', items);
     
     // Sync with main app
     syncItemsToMainApp();
     
-    itemModal.classList.remove('active');
+    if (itemModal) itemModal.classList.remove('active');
     displayMenuItems();
     updateDashboardStats();
 }
@@ -675,7 +746,7 @@ function syncItemsToMainApp() {
         active: item.available
     }));
     
-    localStorage.setItem('menuItems', JSON.stringify(mainAppItems));
+    safeStorage.setJSON('menuItems', mainAppItems);
     
     // Trigger real-time update for customers
     const event = new Event('menuItemsUpdated');
@@ -687,7 +758,7 @@ function deleteItem(itemId) {
     const itemIndex = items.findIndex(item => item.id === itemId);
     if (itemIndex !== -1) {
         items.splice(itemIndex, 1);
-        localStorage.setItem('managerItems', JSON.stringify(items));
+        safeStorage.setJSON('managerItems', items);
         
         // Sync with main app
         syncItemsToMainApp();
@@ -700,6 +771,8 @@ function deleteItem(itemId) {
 
 // Display messages
 function displayMessages() {
+    if (!messagesContainer) return;
+    
     messagesContainer.innerHTML = '';
     
     if (messages.length === 0) {
@@ -742,7 +815,7 @@ function displayMessages() {
                 // Mark as read
                 if (!message.read) {
                     message.read = true;
-                    localStorage.setItem('contactMessages', JSON.stringify(messages));
+                    safeStorage.setJSON('contactMessages', messages);
                     item.classList.remove('unread');
                 }
             }
@@ -752,6 +825,8 @@ function displayMessages() {
 
 // Show message details
 function showMessageDetails(message) {
+    if (!messageModalBody) return;
+    
     messageModalBody.innerHTML = `
         <div class="message-details">
             <div class="message-detail-row">
@@ -769,20 +844,23 @@ function showMessageDetails(message) {
         </div>
     `;
     
-    messageModal.classList.add('active');
+    if (messageModal) messageModal.classList.add('active');
 }
 
 // Load manager data
 function loadManagerData() {
-    document.getElementById('currentManagerEmail').value = managerData.email;
+    const currentEmailInput = document.getElementById('currentManagerEmail');
+    if (currentEmailInput) {
+        currentEmailInput.value = managerData.email;
+    }
 }
 
 // Save manager data
 function saveManagerData(formData) {
-    const newEmail = document.getElementById('newManagerEmail').value.trim();
-    const currentPassword = document.getElementById('currentManagerPassword').value;
-    const newPassword = document.getElementById('newManagerPassword').value;
-    const confirmPassword = document.getElementById('confirmManagerPassword').value;
+    const newEmail = document.getElementById('newManagerEmail') ? document.getElementById('newManagerEmail').value.trim() : '';
+    const currentPassword = document.getElementById('currentManagerPassword') ? document.getElementById('currentManagerPassword').value : '';
+    const newPassword = document.getElementById('newManagerPassword') ? document.getElementById('newManagerPassword').value : '';
+    const confirmPassword = document.getElementById('confirmManagerPassword') ? document.getElementById('confirmManagerPassword').value : '';
     
     // Check if email is being changed
     if (newEmail) {
@@ -815,7 +893,7 @@ function saveManagerData(formData) {
         managerData.password = newPassword;
     }
     
-    localStorage.setItem('managerData', JSON.stringify(managerData));
+    safeStorage.setJSON('managerData', managerData);
     return true;
 }
 
@@ -866,8 +944,8 @@ function downloadStatement() {
 function showConfirmModal(action, data, message) {
     currentAction = action;
     currentActionData = data;
-    confirmMessage.textContent = message;
-    confirmModal.classList.add('active');
+    if (confirmMessage) confirmMessage.textContent = message;
+    if (confirmModal) confirmModal.classList.add('active');
 }
 
 // Handle confirmed action
@@ -880,19 +958,21 @@ function handleConfirmedAction() {
             // Clear session storage
             sessionStorage.removeItem('isManager');
             // Clear current user from localStorage
-            localStorage.removeItem('currentUser');
+            safeStorage.removeItem('currentUser');
             // Redirect to main site
             window.location.href = 'index.html';
             break;
     }
     
-    confirmModal.classList.remove('active');
+    if (confirmModal) confirmModal.classList.remove('active');
     currentAction = null;
     currentActionData = null;
 }
 
 // Toggle sidebar function
 function toggleSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.toggle('active');
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
@@ -901,6 +981,8 @@ function toggleSidebar() {
 
 // Close sidebar function
 function closeSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.remove('active');
     sidebar.classList.remove('active');
     overlay.classList.remove('active');
@@ -986,8 +1068,8 @@ function initialize() {
 }
 
 // Event listeners
-hamburgerBtn.addEventListener('click', toggleSidebar);
-overlay.addEventListener('click', closeSidebar);
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleSidebar);
+if (overlay) overlay.addEventListener('click', closeSidebar);
 
 // Navigation links
 navLinks.forEach(link => {
@@ -995,162 +1077,170 @@ navLinks.forEach(link => {
 });
 
 // Add new item button
-addNewItemBtn?.addEventListener('click', showAddItemModal);
+if (addNewItemBtn) addNewItemBtn.addEventListener('click', showAddItemModal);
 
 // Item form
-itemForm?.addEventListener('submit', (e) => {
+if (itemForm) itemForm.addEventListener('submit', (e) => {
     e.preventDefault();
     
-    const category = itemCategory.value;
-    const description = itemDescription.value.trim();
+    const category = itemCategory ? itemCategory.value : 'meals';
+    const description = itemDescription ? itemDescription.value.trim() : '';
     
     const formData = {
-        name: document.getElementById('itemName').value.trim(),
+        name: document.getElementById('itemName') ? document.getElementById('itemName').value.trim() : '',
         description: category === 'drinks' ? '' : description,
-        price: parseFloat(document.getElementById('itemPrice').value),
+        price: parseFloat(document.getElementById('itemPrice') ? document.getElementById('itemPrice').value : 0),
         category: category,
-        available: document.getElementById('itemAvailable').checked
+        available: document.getElementById('itemAvailable') ? document.getElementById('itemAvailable').checked : true
     };
     
     saveItem(formData);
 });
 
 // Category change handler
-itemCategory?.addEventListener('change', updateDescriptionField);
+if (itemCategory) itemCategory.addEventListener('change', updateDescriptionField);
 
 // Close item modal
-closeItemModal?.addEventListener('click', () => {
-    itemModal.classList.remove('active');
+if (closeItemModal) closeItemModal.addEventListener('click', () => {
+    if (itemModal) itemModal.classList.remove('active');
 });
-cancelItem?.addEventListener('click', () => {
-    itemModal.classList.remove('active');
+
+if (cancelItem) cancelItem.addEventListener('click', () => {
+    if (itemModal) itemModal.classList.remove('active');
 });
 
 // Close item modal when clicking outside
-itemModal?.addEventListener('click', (e) => {
+if (itemModal) itemModal.addEventListener('click', (e) => {
     if (e.target === itemModal) {
         itemModal.classList.remove('active');
     }
 });
 
 // Close order details modal
-closeOrderDetails?.addEventListener('click', () => {
-    orderDetailsModal.classList.remove('active');
+if (closeOrderDetails) closeOrderDetails.addEventListener('click', () => {
+    if (orderDetailsModal) orderDetailsModal.classList.remove('active');
 });
 
 // Close order details modal when clicking outside
-orderDetailsModal?.addEventListener('click', (e) => {
+if (orderDetailsModal) orderDetailsModal.addEventListener('click', (e) => {
     if (e.target === orderDetailsModal) {
         orderDetailsModal.classList.remove('active');
     }
 });
 
 // Close message modal
-closeMessageModal?.addEventListener('click', () => {
-    messageModal.classList.remove('active');
+if (closeMessageModal) closeMessageModal.addEventListener('click', () => {
+    if (messageModal) messageModal.classList.remove('active');
 });
 
 // Close message modal when clicking outside
-messageModal?.addEventListener('click', (e) => {
+if (messageModal) messageModal.addEventListener('click', (e) => {
     if (e.target === messageModal) {
         messageModal.classList.remove('active');
     }
 });
 
 // Order filters
-orderFilters?.forEach(btn => {
-    btn.addEventListener('click', () => {
-        orderFilters.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        displayAllOrders(btn.dataset.status);
+if (orderFilters) {
+    orderFilters.forEach(btn => {
+        btn.addEventListener('click', () => {
+            orderFilters.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            displayAllOrders(btn.dataset.status);
+        });
     });
-});
+}
 
 // Item filters
-itemFilterBtns?.forEach(btn => {
-    btn.addEventListener('click', () => {
-        itemFilterBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        displayMenuItems(btn.dataset.filter);
+if (itemFilterBtns) {
+    itemFilterBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            itemFilterBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            displayMenuItems(btn.dataset.filter);
+        });
     });
-});
+}
 
 // Order search
-orderSearch?.addEventListener('input', (e) => {
+if (orderSearch) orderSearch.addEventListener('input', (e) => {
     displayAllOrders(currentFilterStatus);
 });
 
 // Manager form
-managerForm?.addEventListener('submit', (e) => {
+if (managerForm) managerForm.addEventListener('submit', (e) => {
     e.preventDefault();
     
     const formData = {
-        email: document.getElementById('newManagerEmail').value.trim() || managerData.email
+        email: document.getElementById('newManagerEmail') ? document.getElementById('newManagerEmail').value.trim() : managerData.email
     };
     
     if (saveManagerData(formData)) {
         showToast('Settings saved successfully');
         // Clear form fields
-        document.getElementById('newManagerEmail').value = '';
-        document.getElementById('currentManagerPassword').value = '';
-        document.getElementById('newManagerPassword').value = '';
-        document.getElementById('confirmManagerPassword').value = '';
+        if (document.getElementById('newManagerEmail')) document.getElementById('newManagerEmail').value = '';
+        if (document.getElementById('currentManagerPassword')) document.getElementById('currentManagerPassword').value = '';
+        if (document.getElementById('newManagerPassword')) document.getElementById('newManagerPassword').value = '';
+        if (document.getElementById('confirmManagerPassword')) document.getElementById('confirmManagerPassword').value = '';
         // Update current email display
         loadManagerData();
     }
 });
 
 // Cancel changes
-cancelChanges?.addEventListener('click', () => {
+if (cancelChanges) cancelChanges.addEventListener('click', () => {
     loadManagerData();
     // Clear form fields
-    document.getElementById('newManagerEmail').value = '';
-    document.getElementById('currentManagerPassword').value = '';
-    document.getElementById('newManagerPassword').value = '';
-    document.getElementById('confirmManagerPassword').value = '';
+    if (document.getElementById('newManagerEmail')) document.getElementById('newManagerEmail').value = '';
+    if (document.getElementById('currentManagerPassword')) document.getElementById('currentManagerPassword').value = '';
+    if (document.getElementById('newManagerPassword')) document.getElementById('newManagerPassword').value = '';
+    if (document.getElementById('confirmManagerPassword')) document.getElementById('confirmManagerPassword').value = '';
     showToast('Changes cancelled');
 });
 
 // Confirm modal
-closeConfirmModal?.addEventListener('click', () => {
-    confirmModal.classList.remove('active');
+if (closeConfirmModal) closeConfirmModal.addEventListener('click', () => {
+    if (confirmModal) confirmModal.classList.remove('active');
 });
-cancelConfirm?.addEventListener('click', () => {
-    confirmModal.classList.remove('active');
+
+if (cancelConfirm) cancelConfirm.addEventListener('click', () => {
+    if (confirmModal) confirmModal.classList.remove('active');
 });
-confirmAction?.addEventListener('click', handleConfirmedAction);
+
+if (confirmAction) confirmAction.addEventListener('click', handleConfirmedAction);
 
 // Close confirm modal when clicking outside
-confirmModal?.addEventListener('click', (e) => {
+if (confirmModal) confirmModal.addEventListener('click', (e) => {
     if (e.target === confirmModal) {
         confirmModal.classList.remove('active');
     }
 });
 
 // PIN modal functionality
-closePinModal?.addEventListener('click', () => {
-    pinModal.classList.remove('active');
+if (closePinModal) closePinModal.addEventListener('click', () => {
+    if (pinModal) pinModal.classList.remove('active');
     currentOrderForPin = null;
 });
-cancelPin?.addEventListener('click', () => {
-    pinModal.classList.remove('active');
+
+if (cancelPin) cancelPin.addEventListener('click', () => {
+    if (pinModal) pinModal.classList.remove('active');
     currentOrderForPin = null;
 });
 
 // Verify PIN
-verifyPin?.addEventListener('click', verifyOrderPin);
+if (verifyPin) verifyPin.addEventListener('click', verifyOrderPin);
 
 // PIN input validation
-pinInput?.addEventListener('input', (e) => {
+if (pinInput) pinInput.addEventListener('input', (e) => {
     e.target.value = e.target.value.replace(/\D/g, '');
     if (e.target.value.length > 6) {
         e.target.value = e.target.value.slice(0, 6);
     }
-    pinError.style.display = 'none';
+    if (pinError) pinError.style.display = 'none';
 });
 
 // Close PIN modal when clicking outside
-pinModal?.addEventListener('click', (e) => {
+if (pinModal) pinModal.addEventListener('click', (e) => {
     if (e.target === pinModal) {
         pinModal.classList.remove('active');
         currentOrderForPin = null;
@@ -1158,24 +1248,24 @@ pinModal?.addEventListener('click', (e) => {
 });
 
 // Download statement button
-downloadStatementBtn?.addEventListener('click', downloadStatement);
+if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
 
 // Close modals with escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-        if (itemModal.classList.contains('active')) {
+        if (itemModal && itemModal.classList.contains('active')) {
             itemModal.classList.remove('active');
         }
-        if (orderDetailsModal.classList.contains('active')) {
+        if (orderDetailsModal && orderDetailsModal.classList.contains('active')) {
             orderDetailsModal.classList.remove('active');
         }
-        if (messageModal.classList.contains('active')) {
+        if (messageModal && messageModal.classList.contains('active')) {
             messageModal.classList.remove('active');
         }
-        if (confirmModal.classList.contains('active')) {
+        if (confirmModal && confirmModal.classList.contains('active')) {
             confirmModal.classList.remove('active');
         }
-        if (pinModal.classList.contains('active')) {
+        if (pinModal && pinModal.classList.contains('active')) {
             pinModal.classList.remove('active');
             currentOrderForPin = null;
         }
@@ -1186,6 +1276,8 @@ document.addEventListener('keydown', (e) => {
 function checkDevice() {
     const desktopWarning = document.getElementById('desktopWarning');
     const mobileContent = document.getElementById('mobileContent');
+    
+    if (!desktopWarning || !mobileContent) return;
     
     if (window.innerWidth >= 1025) {
         desktopWarning.style.display = 'flex';
@@ -1225,7 +1317,7 @@ window.addEventListener('ordersUpdated', function() {
 });
 
 window.addEventListener('messagesUpdated', function() {
-    messages = JSON.parse(localStorage.getItem('contactMessages')) || [];
+    messages = safeStorage.getJSON('contactMessages') || [];
     if (document.getElementById('messages').classList.contains('active')) {
         displayMessages();
     }

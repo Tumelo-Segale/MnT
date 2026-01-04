@@ -67,8 +67,56 @@ let yearlyStats = JSON.parse(localStorage.getItem('yearlyStats')) || {
     profit: 0
 };
 
+// Safe localStorage wrapper
+const safeStorage = {
+    getItem: function(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.error('Error getting from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setItem: function(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.error('Error setting to localStorage:', e);
+        }
+    },
+    
+    removeItem: function(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            console.error('Error removing from localStorage:', e);
+        }
+    },
+    
+    getJSON: function(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.error('Error parsing JSON from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setJSON: function(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error('Error stringifying JSON to localStorage:', e);
+        }
+    }
+};
+
 // Show toast message
 function showToast(message, type = 'success') {
+    if (!toast) return;
+    
     toast.textContent = message;
     toast.style.background = type === 'success' ? '#28a745' : '#dc3545';
     toast.style.display = 'block';
@@ -80,13 +128,20 @@ function showToast(message, type = 'success') {
 
 // Format date to DD MMM YYYY
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    const day = date.getDate();
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = monthNames[date.getMonth()];
-    const year = date.getFullYear();
-    
-    return `${day} ${month} ${year}`;
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'Invalid date';
+        
+        const day = date.getDate();
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = monthNames[date.getMonth()];
+        const year = date.getFullYear();
+        
+        return `${day} ${month} ${year}`;
+    } catch (e) {
+        console.error('Error formatting date:', e);
+        return 'Unknown date';
+    }
 }
 
 // Format currency
@@ -101,7 +156,7 @@ function calculateProfit(amount) {
 
 // Load orders from main app
 function loadOrders() {
-    allOrders = JSON.parse(localStorage.getItem('orders')) || [];
+    allOrders = safeStorage.getJSON('orders') || [];
 }
 
 // Update dashboard stats
@@ -127,10 +182,10 @@ function updateDashboardStats() {
     const yearlyRevenueAmount = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
     
     // Update display
-    totalRevenue.textContent = formatCurrency(totalRevenueAmount);
-    completedOrders.textContent = completedOrdersList.length;
-    totalProfit.textContent = formatCurrency(totalProfitAmount);
-    yearRevenue.textContent = formatCurrency(yearlyRevenueAmount);
+    if (totalRevenue) totalRevenue.textContent = formatCurrency(totalRevenueAmount);
+    if (completedOrders) completedOrders.textContent = completedOrdersList.length;
+    if (totalProfit) totalProfit.textContent = formatCurrency(totalProfitAmount);
+    if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenueAmount);
     
     // Update yearly stats
     yearlyStats = {
@@ -140,14 +195,16 @@ function updateDashboardStats() {
         profit: calculateProfit(yearlyRevenueAmount)
     };
     
-    localStorage.setItem('yearlyStats', JSON.stringify(yearlyStats));
+    safeStorage.setJSON('yearlyStats', yearlyStats);
 }
 
 // Display completed orders
 function displayCompletedOrders() {
+    if (!ordersContainer) return;
+    
     ordersContainer.innerHTML = '';
     
-    const searchTerm = orderSearch.value.toLowerCase();
+    const searchTerm = orderSearch ? orderSearch.value.toLowerCase() : '';
     const completedOrdersList = allOrders.filter(order => 
         order.status === 'completed' &&
         (!searchTerm || (order.orderId && order.orderId.toLowerCase().includes(searchTerm)))
@@ -192,17 +249,20 @@ function searchOrders() {
 
 // Load admin data
 function loadAdminData() {
-    document.getElementById('currentAdminEmail').value = adminData.email;
+    const currentEmailInput = document.getElementById('currentAdminEmail');
+    if (currentEmailInput) {
+        currentEmailInput.value = adminData.email;
+    }
 }
 
 // Save admin data
 function saveAdminData(e) {
     e.preventDefault();
     
-    const newEmail = document.getElementById('newAdminEmail').value.trim();
-    const currentPassword = document.getElementById('currentAdminPassword').value;
-    const newPassword = document.getElementById('newAdminPassword').value;
-    const confirmPassword = document.getElementById('confirmAdminPassword').value;
+    const newEmail = document.getElementById('newAdminEmail') ? document.getElementById('newAdminEmail').value.trim() : '';
+    const currentPassword = document.getElementById('currentAdminPassword') ? document.getElementById('currentAdminPassword').value : '';
+    const newPassword = document.getElementById('newAdminPassword') ? document.getElementById('newAdminPassword').value : '';
+    const confirmPassword = document.getElementById('confirmAdminPassword') ? document.getElementById('confirmAdminPassword').value : '';
     
     // Check if email is being changed
     if (newEmail) {
@@ -235,14 +295,14 @@ function saveAdminData(e) {
         adminData.password = newPassword;
     }
     
-    localStorage.setItem('adminData', JSON.stringify(adminData));
+    safeStorage.setJSON('adminData', adminData);
     showToast('Admin details updated successfully');
     
     // Clear form fields
-    document.getElementById('newAdminEmail').value = '';
-    document.getElementById('currentAdminPassword').value = '';
-    document.getElementById('newAdminPassword').value = '';
-    document.getElementById('confirmAdminPassword').value = '';
+    if (document.getElementById('newAdminEmail')) document.getElementById('newAdminEmail').value = '';
+    if (document.getElementById('currentAdminPassword')) document.getElementById('currentAdminPassword').value = '';
+    if (document.getElementById('newAdminPassword')) document.getElementById('newAdminPassword').value = '';
+    if (document.getElementById('confirmAdminPassword')) document.getElementById('confirmAdminPassword').value = '';
     
     // Update current email display
     loadAdminData();
@@ -296,11 +356,17 @@ function downloadStatement() {
 
 // Show confirm modal for logout
 function showLogoutConfirmModal() {
-    confirmMessage.textContent = 'Are you sure you want to logout?';
-    confirmModal.classList.add('active');
+    if (confirmMessage) {
+        confirmMessage.textContent = 'Are you sure you want to logout?';
+    }
+    if (confirmModal) {
+        confirmModal.classList.add('active');
+    }
     
     // Set up confirm action
-    confirmAction.onclick = handleConfirmedLogout;
+    if (confirmAction) {
+        confirmAction.onclick = handleConfirmedLogout;
+    }
 }
 
 // Handle logout
@@ -308,13 +374,15 @@ function handleConfirmedLogout() {
     // Clear session storage
     sessionStorage.removeItem('isAdmin');
     // Clear current user from localStorage
-    localStorage.removeItem('currentUser');
+    safeStorage.removeItem('currentUser');
     // Redirect to main site
     window.location.href = 'index.html';
 }
 
 // Toggle sidebar function
 function toggleSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.toggle('active');
     sidebar.classList.toggle('active');
     overlay.classList.toggle('active');
@@ -323,6 +391,8 @@ function toggleSidebar() {
 
 // Close sidebar function
 function closeSidebar() {
+    if (!hamburgerBtn || !sidebar || !overlay) return;
+    
     hamburgerBtn.classList.remove('active');
     sidebar.classList.remove('active');
     overlay.classList.remove('active');
@@ -398,8 +468,8 @@ function initialize() {
 }
 
 // Event listeners
-hamburgerBtn.addEventListener('click', toggleSidebar);
-overlay.addEventListener('click', closeSidebar);
+if (hamburgerBtn) hamburgerBtn.addEventListener('click', toggleSidebar);
+if (overlay) overlay.addEventListener('click', closeSidebar);
 
 // Navigation links
 navLinks.forEach(link => {
@@ -407,35 +477,36 @@ navLinks.forEach(link => {
 });
 
 // Admin form
-adminForm?.addEventListener('submit', saveAdminData);
+if (adminForm) adminForm.addEventListener('submit', saveAdminData);
 
 // Cancel changes
-cancelChanges?.addEventListener('click', () => {
+if (cancelChanges) cancelChanges.addEventListener('click', () => {
     loadAdminData();
     // Clear form fields
-    document.getElementById('newAdminEmail').value = '';
-    document.getElementById('currentAdminPassword').value = '';
-    document.getElementById('newAdminPassword').value = '';
-    document.getElementById('confirmAdminPassword').value = '';
+    if (document.getElementById('newAdminEmail')) document.getElementById('newAdminEmail').value = '';
+    if (document.getElementById('currentAdminPassword')) document.getElementById('currentAdminPassword').value = '';
+    if (document.getElementById('newAdminPassword')) document.getElementById('newAdminPassword').value = '';
+    if (document.getElementById('confirmAdminPassword')) document.getElementById('confirmAdminPassword').value = '';
     showToast('Changes cancelled');
 });
 
 // Order search
-orderSearch?.addEventListener('input', searchOrders);
+if (orderSearch) orderSearch.addEventListener('input', searchOrders);
 
 // Download statement button
-downloadStatementBtn?.addEventListener('click', downloadStatement);
+if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
 
 // Confirm modal
-closeConfirmModal?.addEventListener('click', () => {
-    confirmModal.classList.remove('active');
+if (closeConfirmModal) closeConfirmModal.addEventListener('click', () => {
+    if (confirmModal) confirmModal.classList.remove('active');
 });
-cancelConfirm?.addEventListener('click', () => {
-    confirmModal.classList.remove('active');
+
+if (cancelConfirm) cancelConfirm.addEventListener('click', () => {
+    if (confirmModal) confirmModal.classList.remove('active');
 });
 
 // Close confirm modal when clicking outside
-confirmModal?.addEventListener('click', (e) => {
+if (confirmModal) confirmModal.addEventListener('click', (e) => {
     if (e.target === confirmModal) {
         confirmModal.classList.remove('active');
     }
@@ -445,6 +516,8 @@ confirmModal?.addEventListener('click', (e) => {
 function checkDevice() {
     const desktopWarning = document.getElementById('desktopWarning');
     const mobileContent = document.getElementById('mobileContent');
+    
+    if (!desktopWarning || !mobileContent) return;
     
     if (window.innerWidth >= 1025) {
         desktopWarning.style.display = 'flex';
