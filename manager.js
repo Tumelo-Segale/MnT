@@ -1,3 +1,4 @@
+
 // Check if user is manager
 function checkManagerAccess() {
     // Check session storage for manager flag
@@ -80,7 +81,6 @@ const todayRevenueChange = document.getElementById('todayRevenueChange');
 const pendingOrders = document.getElementById('pendingOrders');
 const completedOrders = document.getElementById('completedOrders');
 const yearRevenue = document.getElementById('yearRevenue');
-const totalRevenue = document.getElementById('totalRevenue');
 const downloadStatementBtn = document.getElementById('downloadStatementBtn');
 
 // Orders elements
@@ -236,7 +236,6 @@ function loadOrders() {
 // Update dashboard stats
 function updateDashboardStats() {
     const today = new Date().toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     const currentYear = new Date().getFullYear();
     
     // Today's orders
@@ -244,38 +243,16 @@ function updateDashboardStats() {
         order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed'
     ).length;
     
-    const yesterdayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed'
-    ).length;
-    
-    const ordersChange = yesterdayOrdersCount > 0 ? 
-        Math.round(((todayOrdersCount - yesterdayOrdersCount) / yesterdayOrdersCount) * 100) : 0;
-    
     if (todayOrders) todayOrders.textContent = todayOrdersCount;
-    if (todayOrdersChange) {
-        todayOrdersChange.textContent = 
-            `${ordersChange >= 0 ? '+' : ''}${ordersChange}% from yesterday`;
-        todayOrdersChange.className = `stat-change ${ordersChange < 0 ? 'negative' : ''}`;
-    }
+    if (todayOrdersChange) todayOrdersChange.style.display = 'none';
     
     // Today's revenue
     const todayRevenueAmount = currentOrders
         .filter(order => order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed')
         .reduce((sum, order) => sum + (order.total || 0), 0);
     
-    const yesterdayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(yesterday) && order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    const revenueChangePercent = yesterdayRevenueAmount > 0 ? 
-        Math.round(((todayRevenueAmount - yesterdayRevenueAmount) / yesterdayRevenueAmount) * 100) : 0;
-    
     if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
-    if (todayRevenueChange) {
-        todayRevenueChange.textContent = 
-            `${revenueChangePercent >= 0 ? '+' : ''}${revenueChangePercent}% from yesterday`;
-        todayRevenueChange.className = `stat-change ${revenueChangePercent < 0 ? 'negative' : ''}`;
-    }
+    if (todayRevenueChange) todayRevenueChange.style.display = 'none';
     
     // Pending orders
     const pendingCount = currentOrders.filter(order => 
@@ -288,13 +265,6 @@ function updateDashboardStats() {
         order.status === 'completed'
     ).length;
     if (completedOrders) completedOrders.textContent = completedOrdersCount;
-    
-    // Total revenue
-    const allTimeRevenue = currentOrders
-        .filter(order => order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    if (totalRevenue) totalRevenue.textContent = formatCurrency(allTimeRevenue);
     
     // Current year revenue
     const yearlyOrders = currentOrders.filter(order => 
@@ -897,7 +867,7 @@ function saveManagerData(formData) {
     return true;
 }
 
-// Download statement as CSV file
+// Download statement as Excel file
 function downloadStatement() {
     const currentYear = new Date().getFullYear();
     const yearlyOrders = currentOrders.filter(order => 
@@ -910,32 +880,45 @@ function downloadStatement() {
         return;
     }
     
-    // Prepare CSV content
-    let csvContent = "data:text/csv;charset=utf-8,";
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
     
-    // Add header
-    csvContent += "Year,Total Completed Orders,Total Revenue\n";
-    csvContent += `${currentYear},${yearlyStats.orders},R${yearlyStats.revenue}\n\n`;
+    // Summary sheet
+    const summaryData = [
+        ["M&T Restaurant - Annual Statement"],
+        [`Year: ${currentYear}`],
+        [],
+        ["Summary"],
+        ["Total Completed Orders", yearlyStats.orders],
+        ["Total Revenue", `R${yearlyStats.revenue.toFixed(2)}`],
+        [],
+        ["Order Details"]
+    ];
     
-    // Add table header
-    csvContent += "Date,Order ID,Order Amount\n";
+    // Order details
+    const orderDetails = yearlyOrders.map(order => [
+        order.timestamp ? formatDate(order.timestamp) : 'Unknown',
+        order.orderId || 'Unknown',
+        `R${(order.total || 0).toFixed(2)}`
+    ]);
     
-    // Add order data
-    yearlyOrders.forEach(order => {
-        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
-        csvContent += `${date},${order.orderId || 'Unknown'},R${order.total || 0}\n`;
-    });
+    // Combine data
+    const allData = [...summaryData, ["Date", "Order ID", "Order Amount"], ...orderDetails];
     
-    // Create download link
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `M&T_${currentYear}_Statement.csv`);
-    document.body.appendChild(link);
+    const worksheet = XLSX.utils.aoa_to_sheet(allData);
     
-    // Trigger download
-    link.click();
-    document.body.removeChild(link);
+    // Set column widths
+    const colWidths = [
+        { wch: 25 }, // Date column
+        { wch: 30 }, // Order ID column
+        { wch: 15 }  // Amount column
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Statement_${currentYear}`);
+    
+    // Generate and download Excel file
+    XLSX.writeFile(workbook, `M&T_Statement_${currentYear}.xlsx`);
     
     showToast(`Statement downloaded for ${currentYear}`);
 }
@@ -1290,7 +1273,17 @@ function checkDevice() {
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
-    initialize();
+    // Load XLSX library for Excel file generation
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/xlsx/dist/xlsx.full.min.js';
+    script.onload = initialize;
+    script.onerror = () => {
+        console.error('Failed to load XLSX library');
+        showToast('Failed to load Excel library. Please check your connection.', 'error');
+        initialize();
+    };
+    document.head.appendChild(script);
+    
     checkDevice();
 });
 

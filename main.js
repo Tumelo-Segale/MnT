@@ -332,7 +332,6 @@ function isWithinOperatingHours() {
     return currentTime >= 9 && currentTime < 20;
 }
 
-// Check user type and redirect if needed
 // In the checkUserTypeAndRedirect function:
 function checkUserTypeAndRedirect() {
     if (!currentUser) return false;

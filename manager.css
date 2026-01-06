@@ -255,15 +255,6 @@ nav {
   margin-bottom: 4px;
 }
 
-.stat-change {
-  font-size: 0.9rem;
-  color: #28a745;
-}
-
-.stat-change.negative {
-  color: #b22222;
-}
-
 .stat-label {
   font-size: 0.9rem;
   color: #666;

@@ -171,20 +171,20 @@ function updateDashboardStats() {
     
     // Calculate total revenue and profit
     const totalRevenueAmount = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
-    const totalProfitAmount = completedOrdersList.reduce((sum, order) => sum + calculateProfit(order.total || 0), 0);
     
-    // Filter by current year
+    // Filter by current year for profit calculation
     const yearlyOrders = completedOrdersList.filter(order => {
         const orderYear = new Date(order.timestamp).getFullYear();
         return orderYear === currentYear;
     });
     
     const yearlyRevenueAmount = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    const yearlyProfitAmount = calculateProfit(yearlyRevenueAmount);
     
     // Update display
     if (totalRevenue) totalRevenue.textContent = formatCurrency(totalRevenueAmount);
     if (completedOrders) completedOrders.textContent = completedOrdersList.length;
-    if (totalProfit) totalProfit.textContent = formatCurrency(totalProfitAmount);
+    if (totalProfit) totalProfit.textContent = formatCurrency(yearlyProfitAmount);
     if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenueAmount);
     
     // Update yearly stats
@@ -192,7 +192,7 @@ function updateDashboardStats() {
         year: currentYear,
         revenue: yearlyRevenueAmount,
         orders: yearlyOrders.length,
-        profit: calculateProfit(yearlyRevenueAmount)
+        profit: yearlyProfitAmount
     };
     
     safeStorage.setJSON('yearlyStats', yearlyStats);
@@ -310,7 +310,7 @@ function saveAdminData(e) {
     return true;
 }
 
-// Download statement as CSV file
+// Download statement as Excel file
 function downloadStatement() {
     const currentYear = new Date().getFullYear();
     const yearlyOrders = allOrders.filter(order => 
@@ -323,33 +323,51 @@ function downloadStatement() {
         return;
     }
     
-    // Prepare CSV content
-    let csvContent = "data:text/csv;charset=utf-8,";
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
     
-    // Add header
-    csvContent += "Year,Total Completed Orders,Total Revenue,Total Profit\n";
-    csvContent += `${currentYear},${yearlyStats.orders},${yearlyStats.revenue},${yearlyStats.profit}\n\n`;
+    // Summary sheet
+    const summaryData = [
+        ["M&T Restaurant - Annual Statement (Admin)"],
+        [`Year: ${currentYear}`],
+        [],
+        ["Summary"],
+        ["Total Completed Orders", yearlyStats.orders],
+        ["Total Revenue", `R${yearlyStats.revenue.toFixed(2)}`],
+        ["Total Profit (5%)", `R${yearlyStats.profit.toFixed(2)}`],
+        [],
+        ["Order Details"]
+    ];
     
-    // Add table header
-    csvContent += "Date,Order ID,Order Amount,5% Transactional Profit\n";
-    
-    // Add order data
-    yearlyOrders.forEach(order => {
-        const date = order.timestamp ? formatDate(order.timestamp) : 'Unknown';
+    // Order details
+    const orderDetails = yearlyOrders.map(order => {
         const profit = calculateProfit(order.total || 0);
-        csvContent += `${date},${order.orderId || 'Unknown'},${order.total || 0},${profit}\n`;
+        return [
+            order.timestamp ? formatDate(order.timestamp) : 'Unknown',
+            order.orderId || 'Unknown',
+            `R${(order.total || 0).toFixed(2)}`,
+            `R${profit.toFixed(2)}`
+        ];
     });
     
-    // Create download link
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `M&T_Statement_${currentYear}.csv`);
-    document.body.appendChild(link);
+    // Combine data
+    const allData = [...summaryData, ["Date", "Order ID", "Order Amount", "5% Transactional Profit"], ...orderDetails];
     
-    // Trigger download
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.aoa_to_sheet(allData);
+    
+    // Set column widths
+    const colWidths = [
+        { wch: 20 }, // Date column
+        { wch: 20 }, // Order ID column
+        { wch: 15 }, // Amount column
+        { wch: 20 }  // Profit column
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Statement_${currentYear}`);
+    
+    // Generate and download Excel file
+    XLSX.writeFile(workbook, `M&T_Admin_Statement_${currentYear}.xlsx`);
     
     showToast(`Statement downloaded for ${currentYear}`);
 }
@@ -530,7 +548,17 @@ function checkDevice() {
 
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
-    initialize();
+    // Load XLSX library for Excel file generation
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/xlsx/dist/xlsx.full.min.js';
+    script.onload = initialize;
+    script.onerror = () => {
+        console.error('Failed to load XLSX library');
+        showToast('Failed to load Excel library. Please check your connection.', 'error');
+        initialize();
+    };
+    document.head.appendChild(script);
+    
     checkDevice();
 });
 
