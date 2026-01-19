@@ -69,19 +69,33 @@
                         <div class="stat-card">
                             <h3>Total Profit</h3>
                             <div class="stat-number" id="totalProfit">R0</div>
-                            <div class="stat-label">5% transaction profit (current year)</div>
+                            <div class="stat-label">5% transaction profit</div>
                         </div>
                         <div class="stat-card">
                             <h3>This Year's Revenue</h3>
                             <div class="stat-number" id="yearRevenue">R0</div>
                             <div class="stat-label">Current year only</div>
                         </div>
+                        <div class="stat-card">
+                            <h3>This Month's Revenue</h3>
+                            <div class="stat-number" id="monthRevenue">R0</div>
+                            <div class="stat-label">Current month only</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Monthly Profit</h3>
+                            <div class="stat-number" id="monthProfit">R0</div>
+                            <div class="stat-label">Current month profit</div>
+                        </div>
                     </div>
 
                     <!-- Download Statement -->
                     <div class="download-section">
-                        <h3>Annual Statement</h3>
-                        <p>Download complete order data for the current year</p>
+                        <h3>Download Statement</h3>
+                        <p>Select period and download order data</p>
+                        <div class="statement-options">
+                            <button class="statement-option active" data-period="month">Current Month</button>
+                            <button class="statement-option" data-period="year">Current Year</button>
+                        </div>
                         <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
                     </div>
                 </div>

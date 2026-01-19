@@ -66,19 +66,22 @@
                         <div class="stat-card">
                             <h3>Today's Orders</h3>
                             <div class="stat-number" id="todayOrders">0</div>
-                            <div class="stat-change" id="todayOrdersChange" style="display: none;"></div>
                             <div class="stat-label">Completed orders today</div>
                         </div>
                         <div class="stat-card">
                             <h3>Today's Revenue</h3>
                             <div class="stat-number" id="todayRevenue">R0</div>
-                            <div class="stat-change" id="todayRevenueChange" style="display: none;"></div>
                             <div class="stat-label">Revenue generated today</div>
                         </div>
                         <div class="stat-card">
                             <h3>Pending Orders</h3>
                             <div class="stat-number" id="pendingOrders">0</div>
                             <div class="stat-label">Require attention</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>This Month's Revenue</h3>
+                            <div class="stat-number" id="monthRevenue">R0</div>
+                            <div class="stat-label">Current month only</div>
                         </div>
                         <div class="stat-card">
                             <h3>Completed Orders</h3>
@@ -94,8 +97,12 @@
 
                     <!-- Download Statement -->
                     <div class="download-section">
-                        <h3>Annual Statement</h3>
-                        <p>Download complete order data for the current year</p>
+                        <h3>Download Statement</h3>
+                        <p>Select period and download order data</p>
+                        <div class="statement-options">
+                            <button class="statement-option active" data-period="month">Current Month</button>
+                            <button class="statement-option" data-period="year">Current Year</button>
+                        </div>
                         <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
                     </div>
                 </div>

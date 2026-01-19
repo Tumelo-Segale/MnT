@@ -66,6 +66,48 @@
     }
 })();
 
+// Performance Optimizations
+let orderUpdateQueue = [];
+let isProcessingQueue = false;
+let debounceTimer = null;
+
+// Batch process orders for high volume
+function processOrderBatch() {
+    if (isProcessingQueue || orderUpdateQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    const batch = orderUpdateQueue.slice(0, 100); // Process up to 100 orders at once
+    orderUpdateQueue = orderUpdateQueue.slice(100);
+    
+    try {
+        // Save to localStorage in one operation
+        if (batch.length > 0) {
+            const currentOrders = safeStorage.getJSON('orders') || [];
+            const updatedOrders = [...currentOrders];
+            
+            batch.forEach(orderUpdate => {
+                const index = updatedOrders.findIndex(o => o.id === orderUpdate.id);
+                if (index !== -1) {
+                    updatedOrders[index] = orderUpdate;
+                } else {
+                    updatedOrders.push(orderUpdate);
+                }
+            });
+            
+            safeStorage.setJSON('orders', updatedOrders);
+        }
+    } catch (error) {
+        console.error('Error processing order batch:', error);
+    }
+    
+    isProcessingQueue = false;
+    
+    // If more orders in queue, process next batch
+    if (orderUpdateQueue.length > 0) {
+        setTimeout(processOrderBatch, 50); // Small delay to prevent blocking
+    }
+}
+
 // Safe localStorage wrapper functions
 const safeStorage = {
     getItem: function(key) {
@@ -359,7 +401,7 @@ function checkUserTypeAndRedirect() {
     return false;
 }
 
-// Display orders in the orders section
+// Display orders in the orders section with batch rendering
 function displayOrders() {
     if (!ordersContainer) return;
     
@@ -394,36 +436,49 @@ function displayOrders() {
         return dateB - dateA;
     });
     
-    userOrders.forEach(order => {
-        const statusClass = getStatusClass(order.status);
-        const orderElement = document.createElement('div');
-        orderElement.className = 'order-item';
-        orderElement.dataset.orderId = order.id;
-        orderElement.innerHTML = `
-            <div class="order-item-header">
-                <h4>${order.orderId || 'Unknown ID'}</h4>
-                <span class="order-date">${formatDate(order.timestamp)}</span>
-            </div>
-            <div class="order-item-body">
-                <p><strong>Status:</strong> <span class="order-status ${statusClass}">${order.status || 'pending'}</span></p>
-                <p><strong>Total:</strong> R ${(order.total || 0).toFixed(2)}</p>
-            </div>
-            <button class="view-order-btn" data-order-id="${order.id}">View Details</button>
-        `;
-        ordersContainer.appendChild(orderElement);
-    });
+    // Process in batches for performance
+    const batchSize = 50;
+    for (let i = 0; i < userOrders.length; i += batchSize) {
+        const batch = userOrders.slice(i, i + batchSize);
+        
+        batch.forEach(order => {
+            const statusClass = getStatusClass(order.status);
+            const orderElement = document.createElement('div');
+            orderElement.className = 'order-item';
+            orderElement.dataset.orderId = order.id;
+            orderElement.innerHTML = `
+                <div class="order-item-header">
+                    <h4>${order.orderId || 'Unknown ID'}</h4>
+                    <span class="order-date">${formatDate(order.timestamp)}</span>
+                </div>
+                <div class="order-item-body">
+                    <p><strong>Status:</strong> <span class="order-status ${statusClass}">${order.status || 'pending'}</span></p>
+                    <p><strong>Total:</strong> R ${(order.total || 0).toFixed(2)}</p>
+                </div>
+                <button class="view-order-btn" data-order-id="${order.id}">View Details</button>
+            `;
+            ordersContainer.appendChild(orderElement);
+        });
+        
+        // Allow UI to update between batches
+        if (i + batchSize < userOrders.length) {
+            setTimeout(() => {}, 0);
+        }
+    }
     
     // Add event listeners to view order buttons
-    document.querySelectorAll('.view-order-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const orderId = btn.dataset.orderId;
-            const order = userOrders.find(o => o.id && o.id.toString() === orderId);
-            if (order) {
-                showOrderDetails(order);
-            }
+    setTimeout(() => {
+        document.querySelectorAll('.view-order-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const orderId = btn.dataset.orderId;
+                const order = userOrders.find(o => o.id && o.id.toString() === orderId);
+                if (order) {
+                    showOrderDetails(order);
+                }
+            });
         });
-    });
+    }, 0);
 }
 
 // Show order details in modal
@@ -497,7 +552,7 @@ function updateContactForm() {
     }
 }
 
-// Display menu items
+// Display menu items with batch rendering
 function displayMenuItems() {
     const mealsContainer = document.querySelector('.menu-category.meals');
     const drinksContainer = document.querySelector('.menu-category.drinks');
@@ -516,19 +571,30 @@ function displayMenuItems() {
     if (meals.length === 0) {
         mealsContainer.innerHTML = '<div class="empty-state"><p>No meals available</p></div>';
     } else {
-        meals.forEach(item => {
-            const menuItemElement = document.createElement('div');
-            menuItemElement.className = 'menu-item';
-            menuItemElement.dataset.category = item.category;
-            menuItemElement.dataset.price = item.price;
-            menuItemElement.innerHTML = `
-                <h3>${item.name || 'Unknown Item'}</h3>
-                ${item.description ? `<p>${item.description}</p>` : ''}
-                <span class="price">R ${(item.price || 0).toFixed(2)}</span>
-                <button class="add-to-cart">Add to Cart</button>
-            `;
-            mealsContainer.appendChild(menuItemElement);
-        });
+        // Process in batches for performance
+        const batchSize = 50;
+        for (let i = 0; i < meals.length; i += batchSize) {
+            const batch = meals.slice(i, i + batchSize);
+            
+            batch.forEach(item => {
+                const menuItemElement = document.createElement('div');
+                menuItemElement.className = 'menu-item';
+                menuItemElement.dataset.category = item.category;
+                menuItemElement.dataset.price = item.price;
+                menuItemElement.innerHTML = `
+                    <h3>${item.name || 'Unknown Item'}</h3>
+                    ${item.description ? `<p>${item.description}</p>` : ''}
+                    <span class="price">R ${(item.price || 0).toFixed(2)}</span>
+                    <button class="add-to-cart">Add to Cart</button>
+                `;
+                mealsContainer.appendChild(menuItemElement);
+            });
+            
+            // Allow UI to update between batches
+            if (i + batchSize < meals.length) {
+                setTimeout(() => {}, 0);
+            }
+        }
     }
     
     // Display drinks
@@ -536,50 +602,63 @@ function displayMenuItems() {
     if (drinks.length === 0) {
         drinksContainer.innerHTML = '<div class="empty-state"><p>No drinks available</p></div>';
     } else {
-        drinks.forEach(item => {
-            const menuItemElement = document.createElement('div');
-            menuItemElement.className = 'menu-item';
-            menuItemElement.dataset.category = item.category;
-            menuItemElement.dataset.price = item.price;
-            menuItemElement.innerHTML = `
-                <h3>${item.name || 'Unknown Item'}</h3>
-                ${item.description ? `<p>${item.description}</p>` : ''}
-                <span class="price">R ${(item.price || 0).toFixed(2)}</span>
-                <button class="add-to-cart">Add to Cart</button>
-            `;
-            drinksContainer.appendChild(menuItemElement);
-        });
+        // Process in batches for performance
+        const batchSize = 50;
+        for (let i = 0; i < drinks.length; i += batchSize) {
+            const batch = drinks.slice(i, i + batchSize);
+            
+            batch.forEach(item => {
+                const menuItemElement = document.createElement('div');
+                menuItemElement.className = 'menu-item';
+                menuItemElement.dataset.category = item.category;
+                menuItemElement.dataset.price = item.price;
+                menuItemElement.innerHTML = `
+                    <h3>${item.name || 'Unknown Item'}</h3>
+                    ${item.description ? `<p>${item.description}</p>` : ''}
+                    <span class="price">R ${(item.price || 0).toFixed(2)}</span>
+                    <button class="add-to-cart">Add to Cart</button>
+                `;
+                drinksContainer.appendChild(menuItemElement);
+            });
+            
+            // Allow UI to update between batches
+            if (i + batchSize < drinks.length) {
+                setTimeout(() => {}, 0);
+            }
+        }
     }
     
     // Add event listeners to new add to cart buttons
-    document.querySelectorAll('.add-to-cart').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            if (!isWithinOperatingHours()) {
-                showToast('Orders can only be placed during operating hours', 'error');
-                return;
-            }
-            
-            const menuItem = this.closest('.menu-item');
-            if (!menuItem) return;
-            
-            const itemName = menuItem.querySelector('h3')?.textContent || 'Unknown Item';
-            const price = menuItem.dataset.price || '0';
-            const category = menuItem.dataset.category || 'meals';
-            
-            addToCart(itemName, price, category);
-            
-            // Visual feedback
-            const originalText = this.textContent;
-            const originalBg = this.style.background;
-            this.textContent = 'Added';
-            this.style.background = '#28a745';
-            
-            setTimeout(() => {
-                this.textContent = originalText;
-                this.style.background = originalBg;
-            }, 1000);
+    setTimeout(() => {
+        document.querySelectorAll('.add-to-cart').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                if (!isWithinOperatingHours()) {
+                    showToast('Orders can only be placed during operating hours', 'error');
+                    return;
+                }
+                
+                const menuItem = this.closest('.menu-item');
+                if (!menuItem) return;
+                
+                const itemName = menuItem.querySelector('h3')?.textContent || 'Unknown Item';
+                const price = menuItem.dataset.price || '0';
+                const category = menuItem.dataset.category || 'meals';
+                
+                addToCart(itemName, price, category);
+                
+                // Visual feedback
+                const originalText = this.textContent;
+                const originalBg = this.style.background;
+                this.textContent = 'Added';
+                this.style.background = '#28a745';
+                
+                setTimeout(() => {
+                    this.textContent = originalText;
+                    this.style.background = originalBg;
+                }, 1000);
+            });
         });
-    });
+    }, 0);
 }
 
 // Set active section and update active nav link
@@ -961,57 +1040,60 @@ function showMenuCategory(filter) {
     });
 }
 
-// Search menu items
+// Search menu items with debouncing
 function searchMenuItems(searchTerm) {
-    const items = document.querySelectorAll('.menu-item');
-    const categories = document.querySelectorAll('.menu-category');
-    
-    // Show all categories during search
-    categories.forEach(category => {
-        category.style.display = 'block';
-    });
-    
-    let hasResults = false;
-    
-    items.forEach(item => {
-        const itemName = item.querySelector('h3')?.textContent.toLowerCase() || '';
-        const itemDesc = item.querySelector('p') ? item.querySelector('p').textContent.toLowerCase() : '';
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        const items = document.querySelectorAll('.menu-item');
+        const categories = document.querySelectorAll('.menu-category');
         
-        if (itemName.includes(searchTerm.toLowerCase()) || itemDesc.includes(searchTerm.toLowerCase())) {
-            item.style.display = 'block';
-            hasResults = true;
+        // Show all categories during search
+        categories.forEach(category => {
+            category.style.display = 'block';
+        });
+        
+        let hasResults = false;
+        
+        items.forEach(item => {
+            const itemName = item.querySelector('h3')?.textContent.toLowerCase() || '';
+            const itemDesc = item.querySelector('p') ? item.querySelector('p').textContent.toLowerCase() : '';
             
-            // Make sure parent category is visible
-            const category = item.closest('.menu-category');
-            if (category) {
-                category.style.display = 'block';
+            if (itemName.includes(searchTerm.toLowerCase()) || itemDesc.includes(searchTerm.toLowerCase())) {
+                item.style.display = 'block';
+                hasResults = true;
+                
+                // Make sure parent category is visible
+                const category = item.closest('.menu-category');
+                if (category) {
+                    category.style.display = 'block';
+                }
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        // If no results, show message
+        if (!hasResults) {
+            const noResults = document.createElement('div');
+            noResults.className = 'no-results';
+            noResults.textContent = 'No menu items found';
+            noResults.style.textAlign = 'center';
+            noResults.style.padding = '20px';
+            noResults.style.color = '#666';
+            
+            // Remove existing no-results message
+            document.querySelectorAll('.no-results').forEach(el => el.remove());
+            
+            // Add to first visible category
+            const visibleCategory = document.querySelector('.menu-category.active');
+            if (visibleCategory) {
+                visibleCategory.appendChild(noResults);
             }
         } else {
-            item.style.display = 'none';
+            // Remove any existing no-results messages
+            document.querySelectorAll('.no-results').forEach(el => el.remove());
         }
-    });
-    
-    // If no results, show message
-    if (!hasResults) {
-        const noResults = document.createElement('div');
-        noResults.className = 'no-results';
-        noResults.textContent = 'No menu items found';
-        noResults.style.textAlign = 'center';
-        noResults.style.padding = '20px';
-        noResults.style.color = '#666';
-        
-        // Remove existing no-results message
-        document.querySelectorAll('.no-results').forEach(el => el.remove());
-        
-        // Add to first visible category
-        const visibleCategory = document.querySelector('.menu-category.active');
-        if (visibleCategory) {
-            visibleCategory.appendChild(noResults);
-        }
-    } else {
-        // Remove any existing no-results messages
-        document.querySelectorAll('.no-results').forEach(el => el.remove());
-    }
+    }, 300);
 }
 
 // Cart functions
@@ -1084,42 +1166,55 @@ function updateCart() {
     if (cart.length === 0) {
         cartItems.innerHTML = '<div class="empty-cart">Your cart is empty</div>';
     } else {
-        cart.forEach(item => {
-            const itemElement = document.createElement('div');
-            itemElement.className = 'cart-item';
-            itemElement.innerHTML = `
-                <div class="cart-item-info">
-                    <h4>${item.name || 'Unknown Item'}</h4>
-                    <p>R ${(item.price || 0).toFixed(2)}</p>
-                </div>
-                <div class="cart-item-actions">
-                    <button class="quantity-btn decrease" data-item="${item.name}">-</button>
-                    <span>${item.quantity || 1}</span>
-                    <button class="quantity-btn increase" data-item="${item.name}">+</button>
-                    <button class="remove-item" data-item="${item.name}">&times;</button>
-                </div>
-            `;
-            cartItems.appendChild(itemElement);
-        });
+        // Process in batches for performance
+        const batchSize = 50;
+        for (let i = 0; i < cart.length; i += batchSize) {
+            const batch = cart.slice(i, i + batchSize);
+            
+            batch.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'cart-item';
+                itemElement.innerHTML = `
+                    <div class="cart-item-info">
+                        <h4>${item.name || 'Unknown Item'}</h4>
+                        <p>R ${(item.price || 0).toFixed(2)}</p>
+                    </div>
+                    <div class="cart-item-actions">
+                        <button class="quantity-btn decrease" data-item="${item.name}">-</button>
+                        <span>${item.quantity || 1}</span>
+                        <button class="quantity-btn increase" data-item="${item.name}">+</button>
+                        <button class="remove-item" data-item="${item.name}">&times;</button>
+                    </div>
+                `;
+                cartItems.appendChild(itemElement);
+            });
+            
+            // Allow UI to update between batches
+            if (i + batchSize < cart.length) {
+                setTimeout(() => {}, 0);
+            }
+        }
         
         // Add event listeners to new buttons
-        document.querySelectorAll('.decrease').forEach(btn => {
-            btn.addEventListener('click', () => {
-                updateItemQuantity(btn.dataset.item, -1);
+        setTimeout(() => {
+            document.querySelectorAll('.decrease').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    updateItemQuantity(btn.dataset.item, -1);
+                });
             });
-        });
-        
-        document.querySelectorAll('.increase').forEach(btn => {
-            btn.addEventListener('click', () => {
-                updateItemQuantity(btn.dataset.item, 1);
+            
+            document.querySelectorAll('.increase').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    updateItemQuantity(btn.dataset.item, 1);
+                });
             });
-        });
-        
-        document.querySelectorAll('.remove-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                removeFromCart(btn.dataset.item);
+            
+            document.querySelectorAll('.remove-item').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    removeFromCart(btn.dataset.item);
+                });
             });
-        });
+        }, 0);
     }
     
     // Update total amount
@@ -1202,6 +1297,7 @@ function processPayment() {
     handler.openIframe();
 }
 
+// Save order with batch processing
 function saveOrder() {
     if (cart.length === 0) return;
     
@@ -1221,7 +1317,17 @@ function saveOrder() {
     }
     
     orders.unshift(order);
-    safeStorage.setJSON('orders', orders);
+    
+    // Add to update queue for batch processing
+    orderUpdateQueue.push(order);
+    
+    // Process queue if not already processing
+    if (!isProcessingQueue) {
+        processOrderBatch();
+    } else {
+        // Save immediately if queue is being processed
+        safeStorage.setJSON('orders', orders);
+    }
     
     // Display updated orders
     if (document.getElementById('orders')?.classList.contains('active')) {
@@ -1502,7 +1608,7 @@ filterBtns.forEach(btn => {
     });
 });
 
-// Menu search
+// Menu search with debouncing
 if (menuSearch) menuSearch.addEventListener('input', (e) => {
     searchMenuItems(e.target.value);
 });
@@ -1670,3 +1776,6 @@ if (typeof PaystackPop === 'undefined') {
     };
     document.head.appendChild(paystackScript);
 }
+
+// Start order processing queue
+setInterval(processOrderBatch, 1000);

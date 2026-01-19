@@ -1,3 +1,54 @@
+// Performance Optimizations
+let orderUpdateQueue = [];
+let isProcessingQueue = false;
+let debounceTimer = null;
+
+// Batch process orders for high volume
+function processOrderBatch() {
+    if (isProcessingQueue || orderUpdateQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    const batch = orderUpdateQueue.slice(0, 100); // Process up to 100 orders at once
+    orderUpdateQueue = orderUpdateQueue.slice(100);
+    
+    try {
+        // Update stats in batch
+        updateDashboardStats();
+        
+        // Save to localStorage in one operation
+        if (batch.length > 0) {
+            const currentOrders = safeStorage.getJSON('orders') || [];
+            const updatedOrders = [...currentOrders];
+            
+            batch.forEach(orderUpdate => {
+                const index = updatedOrders.findIndex(o => o.id === orderUpdate.id);
+                if (index !== -1) {
+                    updatedOrders[index] = orderUpdate;
+                }
+            });
+            
+            safeStorage.setJSON('orders', updatedOrders);
+        }
+    } catch (error) {
+        console.error('Error processing order batch:', error);
+    }
+    
+    isProcessingQueue = false;
+    
+    // If more orders in queue, process next batch
+    if (orderUpdateQueue.length > 0) {
+        setTimeout(processOrderBatch, 50); // Small delay to prevent blocking
+    }
+}
+
+// Debounced function for frequent updates
+function debouncedUpdateDashboard() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        updateDashboardStats();
+    }, 100); // 100ms debounce
+}
+
 // Check if user is admin
 function checkAdminAccess() {
     // Check session storage for admin flag
@@ -5,7 +56,7 @@ function checkAdminAccess() {
     
     if (!isAdmin) {
         // Check if current user is admin
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        const currentUser = safeStorage.getJSON('currentUser');
         if (currentUser && currentUser.email === 'admin@admin.com' && currentUser.password === 'admin123') {
             sessionStorage.setItem('isAdmin', 'true');
             return true;
@@ -28,11 +79,13 @@ const sections = document.querySelectorAll('.page-section');
 const logoutLink = document.getElementById('logoutLink');
 
 // Dashboard elements
-const totalRevenue = document.getElementById('totalRevenue');
 const completedOrders = document.getElementById('completedOrders');
 const totalProfit = document.getElementById('totalProfit');
 const yearRevenue = document.getElementById('yearRevenue');
+const monthRevenue = document.getElementById('monthRevenue');
+const monthProfit = document.getElementById('monthProfit');
 const downloadStatementBtn = document.getElementById('downloadStatementBtn');
+const statementOptions = document.querySelectorAll('.statement-option');
 
 // Orders elements
 const ordersContainer = document.getElementById('ordersContainer');
@@ -53,19 +106,29 @@ const confirmMessage = document.getElementById('confirmMessage');
 const toast = document.getElementById('toast');
 
 // State
-let adminData = JSON.parse(localStorage.getItem('adminData')) || {
+let adminData = safeStorage.getJSON('adminData') || {
     email: 'admin@admin.com',
     password: 'admin123',
     name: 'Tumelo Segale'
 };
 
 let allOrders = [];
-let yearlyStats = JSON.parse(localStorage.getItem('yearlyStats')) || {
+let yearlyStats = safeStorage.getJSON('yearlyStats') || {
     year: new Date().getFullYear(),
     revenue: 0,
     orders: 0,
     profit: 0
 };
+
+let monthlyStats = safeStorage.getJSON('monthlyStats') || {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    revenue: 0,
+    orders: 0,
+    profit: 0
+};
+
+let currentStatementPeriod = 'month'; // 'month' or 'year'
 
 // Safe localStorage wrapper
 const safeStorage = {
@@ -154,51 +217,109 @@ function calculateProfit(amount) {
     return parseFloat((amount * 0.05).toFixed(2));
 }
 
+// Get current month and year
+function getCurrentMonthYear() {
+    const now = new Date();
+    return {
+        year: now.getFullYear(),
+        month: now.getMonth() + 1 // 1-12
+    };
+}
+
+// Check if stats need reset (new day/month/year)
+function checkStatsReset() {
+    const now = new Date();
+    const currentMonthYear = getCurrentMonthYear();
+    
+    // Check for new month
+    if (monthlyStats.year !== currentMonthYear.year || monthlyStats.month !== currentMonthYear.month) {
+        monthlyStats = {
+            year: currentMonthYear.year,
+            month: currentMonthYear.month,
+            revenue: 0,
+            orders: 0,
+            profit: 0
+        };
+        safeStorage.setJSON('monthlyStats', monthlyStats);
+    }
+    
+    // Check for new year
+    if (yearlyStats.year !== currentMonthYear.year) {
+        yearlyStats = {
+            year: currentMonthYear.year,
+            revenue: 0,
+            orders: 0,
+            profit: 0
+        };
+        safeStorage.setJSON('yearlyStats', yearlyStats);
+    }
+}
+
 // Load orders from main app
 function loadOrders() {
     allOrders = safeStorage.getJSON('orders') || [];
 }
 
-// Update dashboard stats
+// Update dashboard stats with optimization
 function updateDashboardStats() {
-    // Get current year
-    const currentYear = new Date().getFullYear();
+    // Check if stats need reset
+    checkStatsReset();
+    
+    const currentMonthYear = getCurrentMonthYear();
     
     // Filter completed orders
     const completedOrdersList = allOrders.filter(order => 
         order.status === 'completed'
     );
     
-    // Calculate total revenue and profit
-    const totalRevenueAmount = completedOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Filter by current year for profit calculation
-    const yearlyOrders = completedOrdersList.filter(order => {
-        const orderYear = new Date(order.timestamp).getFullYear();
-        return orderYear === currentYear;
+    // Calculate current month stats
+    const monthlyOrders = completedOrdersList.filter(order => {
+        const orderDate = new Date(order.timestamp);
+        return orderDate.getFullYear() === currentMonthYear.year && 
+               (orderDate.getMonth() + 1) === currentMonthYear.month;
     });
     
-    const yearlyRevenueAmount = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const yearlyProfitAmount = calculateProfit(yearlyRevenueAmount);
+    const monthlyRevenue = monthlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    const monthlyProfit = calculateProfit(monthlyRevenue);
+    
+    // Calculate current year stats
+    const yearlyOrders = completedOrdersList.filter(order => {
+        const orderYear = new Date(order.timestamp).getFullYear();
+        return orderYear === currentMonthYear.year;
+    });
+    
+    const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+    const yearlyProfit = calculateProfit(yearlyRevenue);
     
     // Update display
-    if (totalRevenue) totalRevenue.textContent = formatCurrency(totalRevenueAmount);
     if (completedOrders) completedOrders.textContent = completedOrdersList.length;
-    if (totalProfit) totalProfit.textContent = formatCurrency(yearlyProfitAmount);
-    if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenueAmount);
+    if (totalProfit) totalProfit.textContent = formatCurrency(yearlyProfit);
+    if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenue);
+    if (monthRevenue) monthRevenue.textContent = formatCurrency(monthlyRevenue);
+    if (monthProfit) monthProfit.textContent = formatCurrency(monthlyProfit);
     
-    // Update yearly stats
-    yearlyStats = {
-        year: currentYear,
-        revenue: yearlyRevenueAmount,
-        orders: yearlyOrders.length,
-        profit: yearlyProfitAmount
+    // Update stats storage
+    monthlyStats = {
+        year: currentMonthYear.year,
+        month: currentMonthYear.month,
+        revenue: monthlyRevenue,
+        orders: monthlyOrders.length,
+        profit: monthlyProfit
     };
     
+    yearlyStats = {
+        year: currentMonthYear.year,
+        revenue: yearlyRevenue,
+        orders: yearlyOrders.length,
+        profit: yearlyProfit
+    };
+    
+    // Save stats
+    safeStorage.setJSON('monthlyStats', monthlyStats);
     safeStorage.setJSON('yearlyStats', yearlyStats);
 }
 
-// Display completed orders
+// Display completed orders (without customer email)
 function displayCompletedOrders() {
     if (!ordersContainer) return;
     
@@ -222,29 +343,42 @@ function displayCompletedOrders() {
     // Sort by date (newest first)
     completedOrdersList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     
-    completedOrdersList.forEach(order => {
-        const profit = calculateProfit(order.total || 0);
-        const orderElement = document.createElement('div');
-        orderElement.className = 'order-item';
-        orderElement.innerHTML = `
-            <div class="order-item-header">
-                <h4>${order.orderId || 'Unknown ID'}</h4>
-                <span class="order-date">${order.timestamp ? formatDate(order.timestamp) : 'Unknown date'}</span>
-            </div>
-            <div class="order-item-body">
-                <p><strong>Customer:</strong> ${order.userEmail || 'N/A'}</p>
-                <p><strong>Date:</strong> ${order.timestamp ? formatDate(order.timestamp) : 'N/A'}</p>
-                <p><strong>Total:</strong> ${formatCurrency(order.total || 0)}</p>
-                <p><strong>Profit (5%):</strong> <span class="order-profit">${formatCurrency(profit)}</span></p>
-            </div>
-        `;
-        ordersContainer.appendChild(orderElement);
-    });
+    // Process in batches for performance
+    const batchSize = 50;
+    for (let i = 0; i < completedOrdersList.length; i += batchSize) {
+        const batch = completedOrdersList.slice(i, i + batchSize);
+        
+        batch.forEach(order => {
+            const profit = calculateProfit(order.total || 0);
+            const orderElement = document.createElement('div');
+            orderElement.className = 'order-item';
+            orderElement.innerHTML = `
+                <div class="order-item-header">
+                    <h4>${order.orderId || 'Unknown ID'}</h4>
+                    <span class="order-date">${order.timestamp ? formatDate(order.timestamp) : 'Unknown date'}</span>
+                </div>
+                <div class="order-item-body">
+                    <p><strong>Date:</strong> ${order.timestamp ? formatDate(order.timestamp) : 'N/A'}</p>
+                    <p><strong>Total:</strong> ${formatCurrency(order.total || 0)}</p>
+                    <p><strong>Profit (5%):</strong> <span class="order-profit">${formatCurrency(profit)}</span></p>
+                </div>
+            `;
+            ordersContainer.appendChild(orderElement);
+        });
+        
+        // Allow UI to update between batches
+        if (i + batchSize < completedOrdersList.length) {
+            setTimeout(() => {}, 0);
+        }
+    }
 }
 
-// Search orders
+// Search orders with debouncing
 function searchOrders() {
-    displayCompletedOrders();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        displayCompletedOrders();
+    }, 300);
 }
 
 // Load admin data
@@ -312,14 +446,30 @@ function saveAdminData(e) {
 
 // Download statement as Excel file
 function downloadStatement() {
-    const currentYear = new Date().getFullYear();
-    const yearlyOrders = allOrders.filter(order => 
-        order.status === 'completed' && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
     
-    if (yearlyOrders.length === 0) {
-        showToast('No completed orders for the current year', 'error');
+    let filteredOrders = [];
+    let periodLabel = '';
+    
+    if (currentStatementPeriod === 'month') {
+        filteredOrders = allOrders.filter(order => 
+            order.status === 'completed' && 
+            new Date(order.timestamp).getFullYear() === currentYear &&
+            (new Date(order.timestamp).getMonth() + 1) === currentMonth
+        );
+        periodLabel = `${now.toLocaleString('default', { month: 'long' })} ${currentYear}`;
+    } else {
+        filteredOrders = allOrders.filter(order => 
+            order.status === 'completed' && 
+            new Date(order.timestamp).getFullYear() === currentYear
+        );
+        periodLabel = `${currentYear}`;
+    }
+    
+    if (filteredOrders.length === 0) {
+        showToast(`No completed orders for ${currentStatementPeriod === 'month' ? 'this month' : 'this year'}`, 'error');
         return;
     }
     
@@ -328,19 +478,20 @@ function downloadStatement() {
     
     // Summary sheet
     const summaryData = [
-        ["M&T Restaurant - Annual Statement (Admin)"],
-        [`Year: ${currentYear}`],
+        ["M&T Restaurant - Admin Statement"],
+        [`Period: ${periodLabel}`],
+        [`Generated: ${new Date().toLocaleDateString()}`],
         [],
         ["Summary"],
-        ["Total Completed Orders", yearlyStats.orders],
-        ["Total Revenue", `R${yearlyStats.revenue.toFixed(2)}`],
-        ["Total Profit (5%)", `R${yearlyStats.profit.toFixed(2)}`],
+        ["Total Completed Orders", filteredOrders.length],
+        ["Total Revenue", `R${filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2)}`],
+        ["Total Profit (5%)", `R${filteredOrders.reduce((sum, order) => sum + calculateProfit(order.total || 0), 0).toFixed(2)}`],
         [],
         ["Order Details"]
     ];
     
     // Order details
-    const orderDetails = yearlyOrders.map(order => {
+    const orderDetails = filteredOrders.map(order => {
         const profit = calculateProfit(order.total || 0);
         return [
             order.timestamp ? formatDate(order.timestamp) : 'Unknown',
@@ -357,19 +508,27 @@ function downloadStatement() {
     
     // Set column widths
     const colWidths = [
-        { wch: 20 }, // Date column
+        { wch: 15 }, // Date column
         { wch: 20 }, // Order ID column
         { wch: 15 }, // Amount column
         { wch: 20 }  // Profit column
     ];
     worksheet['!cols'] = colWidths;
     
-    XLSX.utils.book_append_sheet(workbook, worksheet, `Statement_${currentYear}`);
+    const sheetName = currentStatementPeriod === 'month' ? 
+        `Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}` : 
+        `Statement_${currentYear}`;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     
     // Generate and download Excel file
-    XLSX.writeFile(workbook, `M&T_Admin_Statement_${currentYear}.xlsx`);
+    const fileName = currentStatementPeriod === 'month' ? 
+        `M&T_Admin_Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}.xlsx` : 
+        `M&T_Admin_Statement_${currentYear}.xlsx`;
     
-    showToast(`Statement downloaded for ${currentYear}`);
+    XLSX.writeFile(workbook, fileName);
+    
+    showToast(`${currentStatementPeriod === 'month' ? 'Monthly' : 'Annual'} statement downloaded`);
 }
 
 // Show confirm modal for logout
@@ -508,8 +667,19 @@ if (cancelChanges) cancelChanges.addEventListener('click', () => {
     showToast('Changes cancelled');
 });
 
-// Order search
+// Order search with debouncing
 if (orderSearch) orderSearch.addEventListener('input', searchOrders);
+
+// Statement period selection
+if (statementOptions) {
+    statementOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            statementOptions.forEach(opt => opt.classList.remove('active'));
+            option.classList.add('active');
+            currentStatementPeriod = option.dataset.period;
+        });
+    });
+}
 
 // Download statement button
 if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
@@ -560,6 +730,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(script);
     
     checkDevice();
+    
+    // Start order processing queue
+    setInterval(processOrderBatch, 1000);
 });
 
 // Handle browser back/forward buttons
@@ -578,7 +751,7 @@ window.addEventListener('hashchange', () => {
 // Listen for real-time order updates
 window.addEventListener('ordersUpdated', function() {
     loadOrders();
-    updateDashboardStats();
+    debouncedUpdateDashboard();
     if (document.getElementById('orders').classList.contains('active')) {
         displayCompletedOrders();
     }
