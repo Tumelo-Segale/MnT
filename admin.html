@@ -59,7 +59,7 @@
                     <h1>Admin Dashboard</h1>
                     <p>Monitor and Manage all restaurant operations.</p>
 
-                    <!-- Stats Cards -->
+                    <!-- Stats Cards - Removed monthly stats -->
                     <div class="stats-grid">
                         <div class="stat-card">
                             <h3>Completed Orders</h3>
@@ -77,26 +77,17 @@
                             <div class="stat-label">Current year only</div>
                         </div>
                         <div class="stat-card">
-                            <h3>This Month's Revenue</h3>
-                            <div class="stat-number" id="monthRevenue">R0</div>
-                            <div class="stat-label">Current month only</div>
-                        </div>
-                        <div class="stat-card">
-                            <h3>Monthly Profit</h3>
-                            <div class="stat-number" id="monthProfit">R0</div>
-                            <div class="stat-label">Current month profit</div>
+                            <h3>Yearly Profit</h3>
+                            <div class="stat-number" id="yearlyProfit">R0</div>
+                            <div class="stat-label">5% of yearly revenue</div>
                         </div>
                     </div>
 
-                    <!-- Download Statement -->
+                    <!-- Download Statement - Simplified for yearly only -->
                     <div class="download-section">
-                        <h3>Download Statement</h3>
-                        <p>Select period and download order data</p>
-                        <div class="statement-options">
-                            <button class="statement-option active" data-period="month">Current Month</button>
-                            <button class="statement-option" data-period="year">Current Year</button>
-                        </div>
-                        <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
+                        <h3>Download Yearly Statement</h3>
+                        <p>Download complete order data for the current year</p>
+                        <button class="download-btn" id="downloadStatementBtn">Download Yearly Statement</button>
                     </div>
                 </div>
             </section>

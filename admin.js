@@ -8,7 +8,7 @@ function processOrderBatch() {
     if (isProcessingQueue || orderUpdateQueue.length === 0) return;
     
     isProcessingQueue = true;
-    const batch = orderUpdateQueue.slice(0, 100); // Process up to 100 orders at once
+    const batch = orderUpdateQueue.slice(0, 100);
     orderUpdateQueue = orderUpdateQueue.slice(100);
     
     try {
@@ -37,7 +37,7 @@ function processOrderBatch() {
     
     // If more orders in queue, process next batch
     if (orderUpdateQueue.length > 0) {
-        setTimeout(processOrderBatch, 50); // Small delay to prevent blocking
+        setTimeout(processOrderBatch, 50);
     }
 }
 
@@ -46,7 +46,7 @@ function debouncedUpdateDashboard() {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
         updateDashboardStats();
-    }, 100); // 100ms debounce
+    }, 100);
 }
 
 // Check if user is admin
@@ -82,10 +82,8 @@ const logoutLink = document.getElementById('logoutLink');
 const completedOrders = document.getElementById('completedOrders');
 const totalProfit = document.getElementById('totalProfit');
 const yearRevenue = document.getElementById('yearRevenue');
-const monthRevenue = document.getElementById('monthRevenue');
-const monthProfit = document.getElementById('monthProfit');
+const yearlyProfit = document.getElementById('yearlyProfit');
 const downloadStatementBtn = document.getElementById('downloadStatementBtn');
-const statementOptions = document.querySelectorAll('.statement-option');
 
 // Orders elements
 const ordersContainer = document.getElementById('ordersContainer');
@@ -119,16 +117,6 @@ let yearlyStats = safeStorage.getJSON('yearlyStats') || {
     orders: 0,
     profit: 0
 };
-
-let monthlyStats = safeStorage.getJSON('monthlyStats') || {
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    revenue: 0,
-    orders: 0,
-    profit: 0
-};
-
-let currentStatementPeriod = 'month'; // 'month' or 'year'
 
 // Safe localStorage wrapper
 const safeStorage = {
@@ -181,7 +169,10 @@ function showToast(message, type = 'success') {
     if (!toast) return;
     
     toast.textContent = message;
-    toast.style.background = type === 'success' ? '#28a745' : '#b22222';
+    toast.className = 'toast';
+    if (type === 'error') {
+        toast.classList.add('error');
+    }
     toast.style.display = 'block';
     
     setTimeout(() => {
@@ -222,31 +213,19 @@ function getCurrentMonthYear() {
     const now = new Date();
     return {
         year: now.getFullYear(),
-        month: now.getMonth() + 1 // 1-12
+        month: now.getMonth() + 1
     };
 }
 
-// Check if stats need reset (new day/month/year)
+// Check if stats need reset (new year)
 function checkStatsReset() {
     const now = new Date();
-    const currentMonthYear = getCurrentMonthYear();
-    
-    // Check for new month
-    if (monthlyStats.year !== currentMonthYear.year || monthlyStats.month !== currentMonthYear.month) {
-        monthlyStats = {
-            year: currentMonthYear.year,
-            month: currentMonthYear.month,
-            revenue: 0,
-            orders: 0,
-            profit: 0
-        };
-        safeStorage.setJSON('monthlyStats', monthlyStats);
-    }
+    const currentYear = now.getFullYear();
     
     // Check for new year
-    if (yearlyStats.year !== currentMonthYear.year) {
+    if (yearlyStats.year !== currentYear) {
         yearlyStats = {
-            year: currentMonthYear.year,
+            year: currentYear,
             revenue: 0,
             orders: 0,
             profit: 0
@@ -265,57 +244,38 @@ function updateDashboardStats() {
     // Check if stats need reset
     checkStatsReset();
     
-    const currentMonthYear = getCurrentMonthYear();
+    const currentYear = new Date().getFullYear();
     
     // Filter completed orders
     const completedOrdersList = allOrders.filter(order => 
         order.status === 'completed'
     );
     
-    // Calculate current month stats
-    const monthlyOrders = completedOrdersList.filter(order => {
-        const orderDate = new Date(order.timestamp);
-        return orderDate.getFullYear() === currentMonthYear.year && 
-               (orderDate.getMonth() + 1) === currentMonthYear.month;
-    });
-    
-    const monthlyRevenue = monthlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const monthlyProfit = calculateProfit(monthlyRevenue);
-    
     // Calculate current year stats
     const yearlyOrders = completedOrdersList.filter(order => {
         const orderYear = new Date(order.timestamp).getFullYear();
-        return orderYear === currentMonthYear.year;
+        return orderYear === currentYear;
     });
     
     const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    const yearlyProfit = calculateProfit(yearlyRevenue);
+    const yearlyProfitAmount = calculateProfit(yearlyRevenue);
+    const totalProfitAmount = calculateProfit(yearlyRevenue);
     
     // Update display
     if (completedOrders) completedOrders.textContent = completedOrdersList.length;
-    if (totalProfit) totalProfit.textContent = formatCurrency(yearlyProfit);
+    if (totalProfit) totalProfit.textContent = formatCurrency(totalProfitAmount);
     if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenue);
-    if (monthRevenue) monthRevenue.textContent = formatCurrency(monthlyRevenue);
-    if (monthProfit) monthProfit.textContent = formatCurrency(monthlyProfit);
+    if (yearlyProfit) yearlyProfit.textContent = formatCurrency(yearlyProfitAmount);
     
     // Update stats storage
-    monthlyStats = {
-        year: currentMonthYear.year,
-        month: currentMonthYear.month,
-        revenue: monthlyRevenue,
-        orders: monthlyOrders.length,
-        profit: monthlyProfit
-    };
-    
     yearlyStats = {
-        year: currentMonthYear.year,
+        year: currentYear,
         revenue: yearlyRevenue,
         orders: yearlyOrders.length,
-        profit: yearlyProfit
+        profit: yearlyProfitAmount
     };
     
     // Save stats
-    safeStorage.setJSON('monthlyStats', monthlyStats);
     safeStorage.setJSON('yearlyStats', yearlyStats);
 }
 
@@ -444,32 +404,18 @@ function saveAdminData(e) {
     return true;
 }
 
-// Download statement as Excel file
+// Download statement as Excel file (Yearly only)
 function downloadStatement() {
     const now = new Date();
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
     
-    let filteredOrders = [];
-    let periodLabel = '';
-    
-    if (currentStatementPeriod === 'month') {
-        filteredOrders = allOrders.filter(order => 
-            order.status === 'completed' && 
-            new Date(order.timestamp).getFullYear() === currentYear &&
-            (new Date(order.timestamp).getMonth() + 1) === currentMonth
-        );
-        periodLabel = `${now.toLocaleString('default', { month: 'long' })} ${currentYear}`;
-    } else {
-        filteredOrders = allOrders.filter(order => 
-            order.status === 'completed' && 
-            new Date(order.timestamp).getFullYear() === currentYear
-        );
-        periodLabel = `${currentYear}`;
-    }
+    const filteredOrders = allOrders.filter(order => 
+        order.status === 'completed' && 
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
     
     if (filteredOrders.length === 0) {
-        showToast(`No completed orders for ${currentStatementPeriod === 'month' ? 'this month' : 'this year'}`, 'error');
+        showToast(`No completed orders for this year`, 'error');
         return;
     }
     
@@ -478,8 +424,8 @@ function downloadStatement() {
     
     // Summary sheet
     const summaryData = [
-        ["M&T Restaurant - Admin Statement"],
-        [`Period: ${periodLabel}`],
+        ["M&T Restaurant - Admin Yearly Statement"],
+        [`Year: ${currentYear}`],
         [`Generated: ${new Date().toLocaleDateString()}`],
         [],
         ["Summary"],
@@ -508,27 +454,23 @@ function downloadStatement() {
     
     // Set column widths
     const colWidths = [
-        { wch: 15 }, // Date column
-        { wch: 20 }, // Order ID column
-        { wch: 15 }, // Amount column
-        { wch: 20 }  // Profit column
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 15 },
+        { wch: 20 }
     ];
     worksheet['!cols'] = colWidths;
     
-    const sheetName = currentStatementPeriod === 'month' ? 
-        `Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}` : 
-        `Statement_${currentYear}`;
+    const sheetName = `Statement_${currentYear}`;
     
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     
     // Generate and download Excel file
-    const fileName = currentStatementPeriod === 'month' ? 
-        `M&T_Admin_Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}.xlsx` : 
-        `M&T_Admin_Statement_${currentYear}.xlsx`;
+    const fileName = `M&T_Admin_Statement_${currentYear}.xlsx`;
     
     XLSX.writeFile(workbook, fileName);
     
-    showToast(`${currentStatementPeriod === 'month' ? 'Monthly' : 'Annual'} statement downloaded`);
+    showToast(`Yearly statement downloaded`);
 }
 
 // Show confirm modal for logout
@@ -669,17 +611,6 @@ if (cancelChanges) cancelChanges.addEventListener('click', () => {
 
 // Order search with debouncing
 if (orderSearch) orderSearch.addEventListener('input', searchOrders);
-
-// Statement period selection
-if (statementOptions) {
-    statementOptions.forEach(option => {
-        option.addEventListener('click', () => {
-            statementOptions.forEach(opt => opt.classList.remove('active'));
-            option.classList.add('active');
-            currentStatementPeriod = option.dataset.period;
-        });
-    });
-}
 
 // Download statement button
 if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);

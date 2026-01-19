@@ -316,7 +316,7 @@ nav {
 }
 
 .download-btn:hover {
-  background: #b22222;
+  background: #a61d1d;
 }
 
 .download-btn:disabled {
@@ -489,6 +489,14 @@ nav {
   transition: background 0.3s ease;
 }
 
+.save-btn:hover {
+  background: #a61d1d;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+}
+
 /* Modal Styles */
 .confirm-modal {
   position: fixed;
@@ -580,7 +588,11 @@ nav {
 }
 
 .delete-btn:hover {
-  background: #b22222;
+  background: #a61d1d;
+}
+
+.cancel-confirm-btn:hover {
+  background: #e0e0e0;
 }
 
 /* Footer */
@@ -617,6 +629,10 @@ footer p {
   z-index: 2000;
   display: none;
   animation: slideIn 0.3s ease;
+}
+
+.toast.error {
+  background: #b22222;
 }
 
 @keyframes slideIn {
