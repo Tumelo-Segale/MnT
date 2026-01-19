@@ -1,54 +1,3 @@
-// Performance Optimizations
-let orderUpdateQueue = [];
-let isProcessingQueue = false;
-let debounceTimer = null;
-
-// Batch process orders for high volume
-function processOrderBatch() {
-    if (isProcessingQueue || orderUpdateQueue.length === 0) return;
-    
-    isProcessingQueue = true;
-    const batch = orderUpdateQueue.slice(0, 100); // Process up to 100 orders at once
-    orderUpdateQueue = orderUpdateQueue.slice(100);
-    
-    try {
-        // Update stats in batch
-        updateDashboardStats();
-        
-        // Save to localStorage in one operation
-        if (batch.length > 0) {
-            const currentOrders = safeStorage.getJSON('orders') || [];
-            const updatedOrders = [...currentOrders];
-            
-            batch.forEach(orderUpdate => {
-                const index = updatedOrders.findIndex(o => o.id === orderUpdate.id);
-                if (index !== -1) {
-                    updatedOrders[index] = orderUpdate;
-                }
-            });
-            
-            safeStorage.setJSON('orders', updatedOrders);
-        }
-    } catch (error) {
-        console.error('Error processing order batch:', error);
-    }
-    
-    isProcessingQueue = false;
-    
-    // If more orders in queue, process next batch
-    if (orderUpdateQueue.length > 0) {
-        setTimeout(processOrderBatch, 50); // Small delay to prevent blocking
-    }
-}
-
-// Debounced function for frequent updates
-function debouncedUpdateDashboard() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-        updateDashboardStats();
-    }, 100); // 100ms debounce
-}
-
 // Check if user is manager
 function checkManagerAccess() {
     // Check session storage for manager flag
@@ -56,7 +5,7 @@ function checkManagerAccess() {
     
     if (!isManager) {
         // Check if current user is manager
-        const currentUser = safeStorage.getJSON('currentUser');
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
         if (currentUser && currentUser.email === 'manager@mnt.com' && currentUser.password === 'manager123') {
             sessionStorage.setItem('isManager', 'true');
             return true;
@@ -125,13 +74,13 @@ const sections = document.querySelectorAll('.page-section');
 
 // Dashboard elements
 const todayOrders = document.getElementById('todayOrders');
+const todayOrdersChange = document.getElementById('todayOrdersChange');
 const todayRevenue = document.getElementById('todayRevenue');
+const todayRevenueChange = document.getElementById('todayRevenueChange');
 const pendingOrders = document.getElementById('pendingOrders');
 const completedOrders = document.getElementById('completedOrders');
 const yearRevenue = document.getElementById('yearRevenue');
-const monthRevenue = document.getElementById('monthRevenue');
 const downloadStatementBtn = document.getElementById('downloadStatementBtn');
-const statementOptions = document.querySelectorAll('.statement-option');
 
 // Orders elements
 const orderFilters = document.querySelectorAll('.filter-btn');
@@ -201,21 +150,6 @@ let currentActionData = null;
 let currentOrderForPin = null;
 let currentOrderForDetails = null;
 let currentFilterStatus = 'pending';
-let currentStatementPeriod = 'month'; // 'month' or 'year'
-
-let dailyStats = safeStorage.getJSON('dailyStats') || {
-    date: new Date().toDateString(),
-    orders: 0,
-    revenue: 0
-};
-
-let monthlyStats = safeStorage.getJSON('managerMonthlyStats') || {
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    revenue: 0,
-    orders: 0
-};
-
 let yearlyStats = safeStorage.getJSON('managerYearlyStats') || {
     year: new Date().getFullYear(),
     revenue: 0,
@@ -272,53 +206,6 @@ function getStatusClass(status) {
     }
 }
 
-// Get current month and year
-function getCurrentMonthYear() {
-    const now = new Date();
-    return {
-        year: now.getFullYear(),
-        month: now.getMonth() + 1 // 1-12
-    };
-}
-
-// Check if stats need reset (new day/month/year)
-function checkStatsReset() {
-    const now = new Date();
-    const today = now.toDateString();
-    const currentMonthYear = getCurrentMonthYear();
-    
-    // Check for new day
-    if (dailyStats.date !== today) {
-        dailyStats = {
-            date: today,
-            orders: 0,
-            revenue: 0
-        };
-        safeStorage.setJSON('dailyStats', dailyStats);
-    }
-    
-    // Check for new month
-    if (monthlyStats.year !== currentMonthYear.year || monthlyStats.month !== currentMonthYear.month) {
-        monthlyStats = {
-            year: currentMonthYear.year,
-            month: currentMonthYear.month,
-            revenue: 0,
-            orders: 0
-        };
-        safeStorage.setJSON('managerMonthlyStats', monthlyStats);
-    }
-    
-    // Check for new year
-    if (yearlyStats.year !== currentMonthYear.year) {
-        yearlyStats = {
-            year: currentMonthYear.year,
-            revenue: 0,
-            orders: 0
-        };
-        safeStorage.setJSON('managerYearlyStats', yearlyStats);
-    }
-}
-
 // Load orders from main app
 function loadOrders() {
     // Clear current orders
@@ -345,90 +232,59 @@ function loadOrders() {
     });
 }
 
-// Update dashboard stats with optimization
+// Update dashboard stats
 function updateDashboardStats() {
-    // Check if stats need reset
-    checkStatsReset();
-    
-    const today = new Date().toDateString();
-    const currentMonthYear = getCurrentMonthYear();
+    const today = new Date().toISOString().split('T')[0];
+    const currentYear = new Date().getFullYear();
     
     // Today's orders
-    const todayOrdersList = currentOrders.filter(order => 
-        order.timestamp && new Date(order.timestamp).toDateString() === today && order.status === 'completed'
-    );
+    const todayOrdersCount = currentOrders.filter(order => 
+        order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed'
+    ).length;
     
-    const todayOrdersCount = todayOrdersList.length;
-    const todayRevenueAmount = todayOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
+    if (todayOrders) todayOrders.textContent = todayOrdersCount;
+    if (todayOrdersChange) todayOrdersChange.style.display = 'none';
     
-    // Update daily stats if they've changed
-    if (dailyStats.orders !== todayOrdersCount || dailyStats.revenue !== todayRevenueAmount) {
-        dailyStats = {
-            date: today,
-            orders: todayOrdersCount,
-            revenue: todayRevenueAmount
-        };
-        safeStorage.setJSON('dailyStats', dailyStats);
-    }
+    // Today's revenue
+    const todayRevenueAmount = currentOrders
+        .filter(order => order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed')
+        .reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
+    if (todayRevenueChange) todayRevenueChange.style.display = 'none';
     
     // Pending orders
     const pendingCount = currentOrders.filter(order => 
         order.status === 'pending'
     ).length;
+    if (pendingOrders) pendingOrders.textContent = pendingCount;
     
-    // Completed orders (all time)
+    // Completed orders
     const completedOrdersCount = currentOrders.filter(order => 
         order.status === 'completed'
     ).length;
+    if (completedOrders) completedOrders.textContent = completedOrdersCount;
     
-    // Monthly stats
-    const monthlyOrders = currentOrders.filter(order => 
-        order.status === 'completed' &&
-        new Date(order.timestamp).getFullYear() === currentMonthYear.year &&
-        (new Date(order.timestamp).getMonth() + 1) === currentMonthYear.month
-    );
-    
-    const monthlyRevenue = monthlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Update monthly stats if they've changed
-    if (monthlyStats.orders !== monthlyOrders.length || monthlyStats.revenue !== monthlyRevenue) {
-        monthlyStats = {
-            year: currentMonthYear.year,
-            month: currentMonthYear.month,
-            revenue: monthlyRevenue,
-            orders: monthlyOrders.length
-        };
-        safeStorage.setJSON('managerMonthlyStats', monthlyStats);
-    }
-    
-    // Yearly stats
+    // Current year revenue
     const yearlyOrders = currentOrders.filter(order => 
         order.status === 'completed' &&
-        new Date(order.timestamp).getFullYear() === currentMonthYear.year
+        new Date(order.timestamp).getFullYear() === currentYear
     );
     
     const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    // Update yearly stats if they've changed
-    if (yearlyStats.orders !== yearlyOrders.length || yearlyStats.revenue !== yearlyRevenue) {
-        yearlyStats = {
-            year: currentMonthYear.year,
-            revenue: yearlyRevenue,
-            orders: yearlyOrders.length
-        };
-        safeStorage.setJSON('managerYearlyStats', yearlyStats);
-    }
-    
-    // Update display
-    if (todayOrders) todayOrders.textContent = todayOrdersCount;
-    if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
-    if (pendingOrders) pendingOrders.textContent = pendingCount;
-    if (completedOrders) completedOrders.textContent = completedOrdersCount;
-    if (monthRevenue) monthRevenue.textContent = formatCurrency(monthlyRevenue);
     if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenue);
+    
+    // Update yearly stats
+    yearlyStats = {
+        year: currentYear,
+        revenue: yearlyRevenue,
+        orders: yearlyOrders.length
+    };
+    
+    safeStorage.setJSON('managerYearlyStats', yearlyStats);
 }
 
-// Search orders with debouncing
+// Search orders
 function searchOrders(searchTerm) {
     const filteredOrders = currentOrders.filter(order => 
         order.status === currentFilterStatus && 
@@ -438,7 +294,7 @@ function searchOrders(searchTerm) {
     displayFilteredOrders(filteredOrders);
 }
 
-// Display filtered orders with batch rendering
+// Display filtered orders
 function displayFilteredOrders(filteredOrders) {
     if (!ordersContainer) return;
     
@@ -460,81 +316,65 @@ function displayFilteredOrders(filteredOrders) {
         return dateB - dateA;
     });
     
-    // Process in batches for performance
-    const batchSize = 50;
-    for (let i = 0; i < filteredOrders.length; i += batchSize) {
-        const batch = filteredOrders.slice(i, i + batchSize);
-        
-        batch.forEach(order => {
-            const statusClass = getStatusClass(order.status || 'pending');
-            const orderElement = document.createElement('div');
-            orderElement.className = 'order-item';
-            orderElement.dataset.orderId = order.id;
-            orderElement.innerHTML = `
-                <div class="order-item-header">
-                    <h4>${order.orderId || 'Unknown ID'}</h4>
-                    <span class="order-date">${order.timestamp ? formatDate(order.timestamp) : 'Unknown date'}</span>
-                </div>
-                <div class="order-item-body">
-                    <p><strong>Status:</strong> <span class="order-status-display ${statusClass}">${order.status || 'pending'}</span></p>
-                    <p><strong>Total:</strong> ${formatCurrency(order.total || 0)}</p>
-                </div>
-                <div class="order-actions">
-                    <button class="status-btn view-order-btn" data-order-id="${order.id}">View Details</button>
-                    ${order.status === 'pending' ? `<button class="status-btn ready-btn" data-order-id="${order.id}" data-status="ready">Mark as Ready</button>` : ''}
-                    ${order.status === 'ready' ? `<button class="status-btn complete-btn" data-order-id="${order.id}" data-status="complete">Mark as Complete</button>` : ''}
-                </div>
-            `;
-            ordersContainer.appendChild(orderElement);
-        });
-        
-        // Allow UI to update between batches
-        if (i + batchSize < filteredOrders.length) {
-            setTimeout(() => {}, 0);
-        }
-    }
+    filteredOrders.forEach(order => {
+        const statusClass = getStatusClass(order.status || 'pending');
+        const orderElement = document.createElement('div');
+        orderElement.className = 'order-item';
+        orderElement.dataset.orderId = order.id;
+        orderElement.innerHTML = `
+            <div class="order-item-header">
+                <h4>${order.orderId || 'Unknown ID'}</h4>
+                <span class="order-date">${order.timestamp ? formatDate(order.timestamp) : 'Unknown date'}</span>
+            </div>
+            <div class="order-item-body">
+                <p><strong>Status:</strong> <span class="order-status-display ${statusClass}">${order.status || 'pending'}</span></p>
+                <p><strong>Total:</strong> ${formatCurrency(order.total || 0)}</p>
+            </div>
+            <div class="order-actions">
+                <button class="status-btn view-order-btn" data-order-id="${order.id}">View Details</button>
+                ${order.status === 'pending' ? `<button class="status-btn ready-btn" data-order-id="${order.id}" data-status="ready">Mark as Ready</button>` : ''}
+                ${order.status === 'ready' ? `<button class="status-btn complete-btn" data-order-id="${order.id}" data-status="complete">Mark as Complete</button>` : ''}
+            </div>
+        `;
+        ordersContainer.appendChild(orderElement);
+    });
     
     // Add event listeners to action buttons
-    setTimeout(() => {
-        document.querySelectorAll('.view-order-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const orderId = parseInt(btn.dataset.orderId);
-                const order = currentOrders.find(o => o.id === orderId);
-                if (order) {
-                    showOrderDetails(order);
-                }
-            });
+    document.querySelectorAll('.view-order-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const orderId = parseInt(btn.dataset.orderId);
+            const order = currentOrders.find(o => o.id === orderId);
+            if (order) {
+                showOrderDetails(order);
+            }
         });
-        
-        document.querySelectorAll('.ready-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const orderId = parseInt(btn.dataset.orderId);
-                updateOrderStatus(orderId, 'ready');
-            });
+    });
+    
+    document.querySelectorAll('.ready-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const orderId = parseInt(btn.dataset.orderId);
+            updateOrderStatus(orderId, 'ready');
         });
-        
-        document.querySelectorAll('.complete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const orderId = parseInt(btn.dataset.orderId);
-                const order = currentOrders.find(o => o.id === orderId);
-                if (order) {
-                    showPinVerification(order);
-                }
-            });
+    });
+    
+    document.querySelectorAll('.complete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const orderId = parseInt(btn.dataset.orderId);
+            const order = currentOrders.find(o => o.id === orderId);
+            if (order) {
+                showPinVerification(order);
+            }
         });
-    }, 0);
+    });
 }
 
-// Display all orders with debouncing
+// Display all orders
 function displayAllOrders(status = 'pending') {
     currentFilterStatus = status;
     const searchTerm = orderSearch ? orderSearch.value.trim() : '';
     
     if (searchTerm) {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            searchOrders(searchTerm);
-        }, 300);
+        searchOrders(searchTerm);
     } else {
         const filteredOrders = currentOrders.filter(order => order.status === status);
         displayFilteredOrders(filteredOrders);
@@ -673,7 +513,7 @@ function verifyOrderPin() {
     currentOrderForPin = null;
 }
 
-// Update order status with batch processing
+// Update order status
 function updateOrderStatus(orderId, newStatus) {
     const orderIndex = currentOrders.findIndex(o => o.id === orderId);
     if (orderIndex !== -1) {
@@ -697,25 +537,31 @@ function updateOrderStatus(orderId, newStatus) {
         // Update in local state
         currentOrders[orderIndex].status = newStatus;
         
-        // Add to update queue for batch processing
-        orderUpdateQueue.push(currentOrders[orderIndex]);
-        
-        // Process queue if not already processing
-        if (!isProcessingQueue) {
-            processOrderBatch();
+        // Update in main app orders (localStorage)
+        const mainOrders = safeStorage.getJSON('orders') || [];
+        const mainOrderIndex = mainOrders.findIndex(o => o.id === orderId);
+        if (mainOrderIndex !== -1) {
+            mainOrders[mainOrderIndex].status = newStatus;
+            safeStorage.setJSON('orders', mainOrders);
+        } else {
+            // If not found in main orders, add it
+            mainOrders.push(currentOrders[orderIndex]);
+            safeStorage.setJSON('orders', mainOrders);
         }
         
-        // Update dashboard immediately
         updateDashboardStats();
-        
-        // Update display
         displayAllOrders(currentFilterStatus);
         showToast(`Order status updated to ${newStatus}`);
         
-        // Trigger real-time update for customers and admin
-        const event = new Event('ordersUpdated');
-        window.dispatchEvent(event);
+        // Update real-time for customers
+        updateRealTimeOrders();
     }
+}
+
+// Update real-time orders for customers
+function updateRealTimeOrders() {
+    const event = new Event('ordersUpdated');
+    window.dispatchEvent(event);
 }
 
 // Display menu items
@@ -742,59 +588,46 @@ function displayMenuItems(filter = 'meals') {
     // Sort by availability (available first)
     filteredItems.sort((a, b) => b.available - a.available);
     
-    // Process in batches for performance
-    const batchSize = 50;
-    for (let i = 0; i < filteredItems.length; i += batchSize) {
-        const batch = filteredItems.slice(i, i + batchSize);
-        
-        batch.forEach(item => {
-            const itemElement = document.createElement('div');
-            itemElement.className = `item-card ${item.available ? '' : 'unavailable'}`;
-            itemElement.innerHTML = `
-                <div class="item-header">
-                    <h3 class="item-name">${item.name}</h3>
-                    <span class="item-price">${formatCurrency(item.price)}</span>
+    filteredItems.forEach(item => {
+        const itemElement = document.createElement('div');
+        itemElement.className = `item-card ${item.available ? '' : 'unavailable'}`;
+        itemElement.innerHTML = `
+            <div class="item-header">
+                <h3 class="item-name">${item.name}</h3>
+                <span class="item-price">${formatCurrency(item.price)}</span>
+            </div>
+            ${item.description ? `<p class="item-description">${item.description}</p>` : ''}
+            <div class="item-footer">
+                <span class="item-category">${item.category}</span>
+                <div class="item-actions">
+                    <button class="item-btn edit-item-btn" data-item-id="${item.id}">Edit</button>
+                    <button class="item-btn delete-item-btn" data-item-id="${item.id}">Delete</button>
                 </div>
-                ${item.description ? `<p class="item-description">${item.description}</p>` : ''}
-                <div class="item-footer">
-                    <span class="item-category">${item.category}</span>
-                    <div class="item-actions">
-                        <button class="item-btn edit-item-btn" data-item-id="${item.id}">Edit</button>
-                        <button class="item-btn delete-item-btn" data-item-id="${item.id}">Delete</button>
-                    </div>
-                </div>
-            `;
-            itemsGrid.appendChild(itemElement);
-        });
-        
-        // Allow UI to update between batches
-        if (i + batchSize < filteredItems.length) {
-            setTimeout(() => {}, 0);
-        }
-    }
+            </div>
+        `;
+        itemsGrid.appendChild(itemElement);
+    });
     
     // Add event listeners to item buttons
-    setTimeout(() => {
-        document.querySelectorAll('.edit-item-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const itemId = parseInt(btn.dataset.itemId);
-                const item = items.find(i => i.id === itemId);
-                if (item) {
-                    showEditItemModal(item);
-                }
-            });
+    document.querySelectorAll('.edit-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const itemId = parseInt(btn.dataset.itemId);
+            const item = items.find(i => i.id === itemId);
+            if (item) {
+                showEditItemModal(item);
+            }
         });
-        
-        document.querySelectorAll('.delete-item-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const itemId = parseInt(btn.dataset.itemId);
-                const item = items.find(i => i.id === itemId);
-                if (item) {
-                    showConfirmModal('deleteItem', itemId, `Are you sure you want to delete "${item.name}"?`);
-                }
-            });
+    });
+    
+    document.querySelectorAll('.delete-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const itemId = parseInt(btn.dataset.itemId);
+            const item = items.find(i => i.id === itemId);
+            if (item) {
+                showConfirmModal('deleteItem', itemId, `Are you sure you want to delete "${item.name}"?`);
+            }
         });
-    }, 0);
+    });
 }
 
 // Show add item modal
@@ -926,50 +759,37 @@ function displayMessages() {
         return new Date(b.timestamp) - new Date(a.timestamp);
     });
     
-    // Process in batches for performance
-    const batchSize = 50;
-    for (let i = 0; i < messages.length; i += batchSize) {
-        const batch = messages.slice(i, i + batchSize);
-        
-        batch.forEach(message => {
-            const messageElement = document.createElement('div');
-            messageElement.className = `message-item ${message.read ? '' : 'unread'}`;
-            messageElement.dataset.messageId = message.id;
-            messageElement.innerHTML = `
-                <div class="message-header">
-                    <div class="message-sender">${message.name}</div>
-                    <div class="message-date">${formatDate(message.timestamp)}</div>
-                </div>
-                <p class="message-preview">${message.message}</p>
-            `;
-            messagesContainer.appendChild(messageElement);
-        });
-        
-        // Allow UI to update between batches
-        if (i + batchSize < messages.length) {
-            setTimeout(() => {}, 0);
-        }
-    }
+    messages.forEach(message => {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message-item ${message.read ? '' : 'unread'}`;
+        messageElement.dataset.messageId = message.id;
+        messageElement.innerHTML = `
+            <div class="message-header">
+                <div class="message-sender">${message.name}</div>
+                <div class="message-date">${formatDate(message.timestamp)}</div>
+            </div>
+            <p class="message-preview">${message.message}</p>
+        `;
+        messagesContainer.appendChild(messageElement);
+    });
     
     // Add event listeners to messages
-    setTimeout(() => {
-        document.querySelectorAll('.message-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const messageId = parseInt(item.dataset.messageId);
-                const message = messages.find(m => m.id === messageId);
-                if (message) {
-                    showMessageDetails(message);
-                    
-                    // Mark as read
-                    if (!message.read) {
-                        message.read = true;
-                        safeStorage.setJSON('contactMessages', messages);
-                        item.classList.remove('unread');
-                    }
+    document.querySelectorAll('.message-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const messageId = parseInt(item.dataset.messageId);
+            const message = messages.find(m => m.id === messageId);
+            if (message) {
+                showMessageDetails(message);
+                
+                // Mark as read
+                if (!message.read) {
+                    message.read = true;
+                    safeStorage.setJSON('contactMessages', messages);
+                    item.classList.remove('unread');
                 }
-            });
+            }
         });
-    }, 0);
+    });
 }
 
 // Show message details
@@ -1048,30 +868,14 @@ function saveManagerData(formData) {
 
 // Download statement as Excel file
 function downloadStatement() {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    const yearlyOrders = currentOrders.filter(order => 
+        order.status === 'completed' && 
+        new Date(order.timestamp).getFullYear() === currentYear
+    );
     
-    let filteredOrders = [];
-    let periodLabel = '';
-    
-    if (currentStatementPeriod === 'month') {
-        filteredOrders = currentOrders.filter(order => 
-            order.status === 'completed' && 
-            new Date(order.timestamp).getFullYear() === currentYear &&
-            (new Date(order.timestamp).getMonth() + 1) === currentMonth
-        );
-        periodLabel = `${now.toLocaleString('default', { month: 'long' })} ${currentYear}`;
-    } else {
-        filteredOrders = currentOrders.filter(order => 
-            order.status === 'completed' && 
-            new Date(order.timestamp).getFullYear() === currentYear
-        );
-        periodLabel = `${currentYear}`;
-    }
-    
-    if (filteredOrders.length === 0) {
-        showToast(`No completed orders for ${currentStatementPeriod === 'month' ? 'this month' : 'this year'}`, 'error');
+    if (yearlyOrders.length === 0) {
+        showToast('No completed orders for the current year', 'error');
         return;
     }
     
@@ -1080,53 +884,42 @@ function downloadStatement() {
     
     // Summary sheet
     const summaryData = [
-        ["M&T Restaurant - Manager Statement"],
-        [`Period: ${periodLabel}`],
-        [`Generated: ${new Date().toLocaleDateString()}`],
+        ["M&T Restaurant - Annual Statement"],
+        [`Year: ${currentYear}`],
         [],
         ["Summary"],
-        ["Total Completed Orders", filteredOrders.length],
-        ["Total Revenue", `R${filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2)}`],
+        ["Total Completed Orders", yearlyStats.orders],
+        ["Total Revenue", `R${yearlyStats.revenue.toFixed(2)}`],
         [],
         ["Order Details"]
     ];
     
     // Order details
-    const orderDetails = filteredOrders.map(order => [
+    const orderDetails = yearlyOrders.map(order => [
         order.timestamp ? formatDate(order.timestamp) : 'Unknown',
         order.orderId || 'Unknown',
-        order.userEmail || 'N/A',
         `R${(order.total || 0).toFixed(2)}`
     ]);
     
     // Combine data
-    const allData = [...summaryData, ["Date", "Order ID", "Customer Email", "Order Amount"], ...orderDetails];
+    const allData = [...summaryData, ["Date", "Order ID", "Order Amount"], ...orderDetails];
     
     const worksheet = XLSX.utils.aoa_to_sheet(allData);
     
     // Set column widths
     const colWidths = [
-        { wch: 15 }, // Date column
-        { wch: 20 }, // Order ID column
-        { wch: 25 }, // Email column
+        { wch: 25 }, // Date column
+        { wch: 30 }, // Order ID column
         { wch: 15 }  // Amount column
     ];
     worksheet['!cols'] = colWidths;
     
-    const sheetName = currentStatementPeriod === 'month' ? 
-        `Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}` : 
-        `Statement_${currentYear}`;
-    
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    XLSX.utils.book_append_sheet(workbook, worksheet, `Statement_${currentYear}`);
     
     // Generate and download Excel file
-    const fileName = currentStatementPeriod === 'month' ? 
-        `M&T_Statement_${currentYear}_${currentMonth.toString().padStart(2, '0')}.xlsx` : 
-        `M&T_Statement_${currentYear}.xlsx`;
+    XLSX.writeFile(workbook, `M&T_Statement_${currentYear}.xlsx`);
     
-    XLSX.writeFile(workbook, fileName);
-    
-    showToast(`${currentStatementPeriod === 'month' ? 'Monthly' : 'Annual'} statement downloaded`);
+    showToast(`Statement downloaded for ${currentYear}`);
 }
 
 // Show confirm modal
@@ -1351,7 +1144,7 @@ if (itemFilterBtns) {
     });
 }
 
-// Order search with debouncing
+// Order search
 if (orderSearch) orderSearch.addEventListener('input', (e) => {
     displayAllOrders(currentFilterStatus);
 });
@@ -1386,20 +1179,6 @@ if (cancelChanges) cancelChanges.addEventListener('click', () => {
     if (document.getElementById('confirmManagerPassword')) document.getElementById('confirmManagerPassword').value = '';
     showToast('Changes cancelled');
 });
-
-// Statement period selection
-if (statementOptions) {
-    statementOptions.forEach(option => {
-        option.addEventListener('click', () => {
-            statementOptions.forEach(opt => opt.classList.remove('active'));
-            option.classList.add('active');
-            currentStatementPeriod = option.dataset.period;
-        });
-    });
-}
-
-// Download statement button
-if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
 
 // Confirm modal
 if (closeConfirmModal) closeConfirmModal.addEventListener('click', () => {
@@ -1449,6 +1228,9 @@ if (pinModal) pinModal.addEventListener('click', (e) => {
         currentOrderForPin = null;
     }
 });
+
+// Download statement button
+if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
 
 // Close modals with escape key
 document.addEventListener('keydown', (e) => {
@@ -1502,12 +1284,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(script);
     
     checkDevice();
-    
-    // Start order processing queue
-    setInterval(processOrderBatch, 1000);
-    
-    // Check for new day every minute
-    setInterval(checkStatsReset, 60000);
 });
 
 // Handle browser back/forward buttons
@@ -1526,7 +1302,7 @@ window.addEventListener('hashchange', () => {
 // Listen for real-time updates
 window.addEventListener('ordersUpdated', function() {
     loadOrders();
-    debouncedUpdateDashboard();
+    updateDashboardStats();
     if (document.getElementById('orders').classList.contains('active')) {
         displayAllOrders(currentFilterStatus);
     }
