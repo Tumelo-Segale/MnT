@@ -65,6 +65,80 @@ const safeStorage = {
     }
 };
 
+// Performance-optimized Order Manager
+class OrderManager {
+    constructor() {
+        this.orders = [];
+        this.orderMap = new Map();
+        this.statusCache = null;
+        this.initialized = false;
+    }
+    
+    init(orders) {
+        this.orders = orders || [];
+        this.orderMap.clear();
+        this.statusCache = null;
+        
+        this.orders.forEach(order => {
+            if (order.id) this.orderMap.set(order.id, order);
+        });
+        this.initialized = true;
+    }
+    
+    getOrder(id) {
+        return this.orderMap.get(id);
+    }
+    
+    getOrdersByStatus(status) {
+        if (this.statusCache && this.statusCache.status === status && 
+            Date.now() - this.statusCache.timestamp < 5000) {
+            return this.statusCache.orders;
+        }
+        
+        const orders = this.orders.filter(order => order.status === status);
+        
+        this.statusCache = {
+            status: status,
+            orders: orders,
+            timestamp: Date.now()
+        };
+        
+        return orders;
+    }
+    
+    getCompletedOrders() {
+        return this.orders.filter(order => order.status === 'completed');
+    }
+    
+    getOrdersByDateRange(startDate, endDate) {
+        return this.orders.filter(order => {
+            if (order.status !== 'completed') return false;
+            const orderDate = new Date(order.timestamp);
+            return orderDate >= startDate && orderDate <= endDate;
+        });
+    }
+    
+    updateOrderStatus(id, status) {
+        const order = this.orderMap.get(id);
+        if (order) {
+            order.status = status;
+            this.statusCache = null;
+            return true;
+        }
+        return false;
+    }
+    
+    searchOrders(searchTerm, status = null) {
+        const term = searchTerm.toLowerCase();
+        return this.orders.filter(order => {
+            if (status && order.status !== status) return false;
+            return order.orderId && order.orderId.toLowerCase().includes(term);
+        });
+    }
+}
+
+const orderManager = new OrderManager();
+
 // Get DOM elements
 const hamburgerBtn = document.getElementById('hamburgerBtn');
 const sidebar = document.getElementById('sidebar');
@@ -81,6 +155,15 @@ const pendingOrders = document.getElementById('pendingOrders');
 const completedOrders = document.getElementById('completedOrders');
 const yearRevenue = document.getElementById('yearRevenue');
 const downloadStatementBtn = document.getElementById('downloadStatementBtn');
+const monthRevenue = document.getElementById('monthRevenue');
+const monthOrders = document.getElementById('monthOrders');
+
+// Statement modal elements
+const statementModal = document.getElementById('statementModal');
+const closeStatementModal = document.getElementById('closeStatementModal');
+const cancelStatement = document.getElementById('cancelStatement');
+const confirmStatement = document.getElementById('confirmStatement');
+const statementType = document.getElementById('statementType');
 
 // Orders elements
 const orderFilters = document.querySelectorAll('.filter-btn');
@@ -150,11 +233,64 @@ let currentActionData = null;
 let currentOrderForPin = null;
 let currentOrderForDetails = null;
 let currentFilterStatus = 'pending';
-let yearlyStats = safeStorage.getJSON('managerYearlyStats') || {
-    year: new Date().getFullYear(),
-    revenue: 0,
-    orders: 0
+
+// Stats tracking with auto-reset
+let stats = safeStorage.getJSON('managerStats') || {
+    today: {
+        date: new Date().toDateString(),
+        orders: 0,
+        revenue: 0
+    },
+    monthly: {
+        month: new Date().getMonth(),
+        year: new Date().getFullYear(),
+        orders: 0,
+        revenue: 0
+    },
+    yearly: {
+        year: new Date().getFullYear(),
+        orders: 0,
+        revenue: 0
+    }
 };
+
+// Check and reset stats if needed
+function checkAndResetStats() {
+    const now = new Date();
+    const today = now.toDateString();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Reset daily stats if it's a new day
+    if (stats.today.date !== today) {
+        stats.today = {
+            date: today,
+            orders: 0,
+            revenue: 0
+        };
+    }
+    
+    // Reset monthly stats if it's a new month
+    if (stats.monthly.month !== currentMonth || stats.monthly.year !== currentYear) {
+        stats.monthly = {
+            month: currentMonth,
+            year: currentYear,
+            orders: 0,
+            revenue: 0
+        };
+    }
+    
+    // Reset yearly stats if it's a new year
+    if (stats.yearly.year !== currentYear) {
+        stats.yearly = {
+            year: currentYear,
+            orders: 0,
+            revenue: 0
+        };
+    }
+    
+    safeStorage.setJSON('managerStats', stats);
+}
 
 // Show toast message
 function showToast(message, type = 'success') {
@@ -230,66 +366,86 @@ function loadOrders() {
         };
         return formattedOrder;
     });
+    
+    orderManager.init(currentOrders);
 }
 
-// Update dashboard stats
+// Update dashboard stats with auto-reset
 function updateDashboardStats() {
-    const today = new Date().toISOString().split('T')[0];
-    const currentYear = new Date().getFullYear();
+    // Check and reset stats if needed
+    checkAndResetStats();
     
-    // Today's orders
-    const todayOrdersCount = currentOrders.filter(order => 
-        order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed'
-    ).length;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
     
-    if (todayOrders) todayOrders.textContent = todayOrdersCount;
-    if (todayOrdersChange) todayOrdersChange.style.display = 'none';
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+    const firstDayOfNextMonth = new Date(currentYear, currentMonth + 1, 1);
     
-    // Today's revenue
-    const todayRevenueAmount = currentOrders
-        .filter(order => order.timestamp && order.timestamp.startsWith(today) && order.status === 'completed')
-        .reduce((sum, order) => sum + (order.total || 0), 0);
+    const firstDayOfYear = new Date(currentYear, 0, 1);
+    const firstDayOfNextYear = new Date(currentYear + 1, 0, 1);
     
-    if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
-    if (todayRevenueChange) todayRevenueChange.style.display = 'none';
+    // Get completed orders
+    const completedOrdersList = orderManager.getCompletedOrders();
     
-    // Pending orders
-    const pendingCount = currentOrders.filter(order => 
-        order.status === 'pending'
-    ).length;
-    if (pendingOrders) pendingOrders.textContent = pendingCount;
+    // Calculate today's stats
+    const todayOrdersList = completedOrdersList.filter(order => {
+        const orderDate = new Date(order.timestamp);
+        return orderDate >= today && orderDate < tomorrow;
+    });
     
-    // Completed orders
-    const completedOrdersCount = currentOrders.filter(order => 
-        order.status === 'completed'
-    ).length;
-    if (completedOrders) completedOrders.textContent = completedOrdersCount;
+    const todayOrdersCount = todayOrdersList.length;
+    const todayRevenueAmount = todayOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
     
-    // Current year revenue
-    const yearlyOrders = currentOrders.filter(order => 
-        order.status === 'completed' &&
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
+    // Calculate monthly stats
+    const monthlyOrdersList = completedOrdersList.filter(order => {
+        const orderDate = new Date(order.timestamp);
+        return orderDate >= firstDayOfMonth && orderDate < firstDayOfNextMonth;
+    });
     
-    const yearlyRevenue = yearlyOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenue);
+    const monthlyOrdersCount = monthlyOrdersList.length;
+    const monthlyRevenueAmount = monthlyOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
     
-    // Update yearly stats
-    yearlyStats = {
-        year: currentYear,
-        revenue: yearlyRevenue,
-        orders: yearlyOrders.length
-    };
+    // Calculate yearly stats
+    const yearlyOrdersList = completedOrdersList.filter(order => {
+        const orderDate = new Date(order.timestamp);
+        return orderDate >= firstDayOfYear && orderDate < firstDayOfNextYear;
+    });
     
-    safeStorage.setJSON('managerYearlyStats', yearlyStats);
+    const yearlyOrdersCount = yearlyOrdersList.length;
+    const yearlyRevenueAmount = yearlyOrdersList.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    // Get pending orders
+    const pendingCount = orderManager.getOrdersByStatus('pending').length;
+    
+    // Update display with requestAnimationFrame for better performance
+    requestAnimationFrame(() => {
+        if (todayOrders) todayOrders.textContent = todayOrdersCount;
+        if (todayRevenue) todayRevenue.textContent = formatCurrency(todayRevenueAmount);
+        if (pendingOrders) pendingOrders.textContent = pendingCount;
+        if (completedOrders) completedOrders.textContent = completedOrdersList.length;
+        if (monthRevenue) monthRevenue.textContent = formatCurrency(monthlyRevenueAmount);
+        if (monthOrders) monthOrders.textContent = monthlyOrdersCount;
+        if (yearRevenue) yearRevenue.textContent = formatCurrency(yearlyRevenueAmount);
+    });
+    
+    // Update stats tracking
+    stats.today.orders = todayOrdersCount;
+    stats.today.revenue = todayRevenueAmount;
+    stats.monthly.orders = monthlyOrdersCount;
+    stats.monthly.revenue = monthlyRevenueAmount;
+    stats.yearly.orders = yearlyOrdersCount;
+    stats.yearly.revenue = yearlyRevenueAmount;
+    
+    safeStorage.setJSON('managerStats', stats);
 }
 
 // Search orders
 function searchOrders(searchTerm) {
-    const filteredOrders = currentOrders.filter(order => 
-        order.status === currentFilterStatus && 
-        order.orderId && order.orderId.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredOrders = orderManager.searchOrders(searchTerm, currentFilterStatus);
     
     displayFilteredOrders(filteredOrders);
 }
@@ -308,6 +464,9 @@ function displayFilteredOrders(filteredOrders) {
         `;
         return;
     }
+    
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
     
     // Sort by date (newest first)
     filteredOrders.sort((a, b) => {
@@ -336,14 +495,16 @@ function displayFilteredOrders(filteredOrders) {
                 ${order.status === 'ready' ? `<button class="status-btn complete-btn" data-order-id="${order.id}" data-status="complete">Mark as Complete</button>` : ''}
             </div>
         `;
-        ordersContainer.appendChild(orderElement);
+        fragment.appendChild(orderElement);
     });
+    
+    ordersContainer.appendChild(fragment);
     
     // Add event listeners to action buttons
     document.querySelectorAll('.view-order-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const orderId = parseInt(btn.dataset.orderId);
-            const order = currentOrders.find(o => o.id === orderId);
+            const order = orderManager.getOrder(orderId);
             if (order) {
                 showOrderDetails(order);
             }
@@ -360,7 +521,7 @@ function displayFilteredOrders(filteredOrders) {
     document.querySelectorAll('.complete-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const orderId = parseInt(btn.dataset.orderId);
-            const order = currentOrders.find(o => o.id === orderId);
+            const order = orderManager.getOrder(orderId);
             if (order) {
                 showPinVerification(order);
             }
@@ -376,7 +537,7 @@ function displayAllOrders(status = 'pending') {
     if (searchTerm) {
         searchOrders(searchTerm);
     } else {
-        const filteredOrders = currentOrders.filter(order => order.status === status);
+        const filteredOrders = orderManager.getOrdersByStatus(status);
         displayFilteredOrders(filteredOrders);
     }
 }
@@ -536,6 +697,7 @@ function updateOrderStatus(orderId, newStatus) {
         
         // Update in local state
         currentOrders[orderIndex].status = newStatus;
+        orderManager.updateOrderStatus(orderId, newStatus);
         
         // Update in main app orders (localStorage)
         const mainOrders = safeStorage.getJSON('orders') || [];
@@ -588,6 +750,9 @@ function displayMenuItems(filter = 'meals') {
     // Sort by availability (available first)
     filteredItems.sort((a, b) => b.available - a.available);
     
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
+    
     filteredItems.forEach(item => {
         const itemElement = document.createElement('div');
         itemElement.className = `item-card ${item.available ? '' : 'unavailable'}`;
@@ -605,8 +770,10 @@ function displayMenuItems(filter = 'meals') {
                 </div>
             </div>
         `;
-        itemsGrid.appendChild(itemElement);
+        fragment.appendChild(itemElement);
     });
+    
+    itemsGrid.appendChild(fragment);
     
     // Add event listeners to item buttons
     document.querySelectorAll('.edit-item-btn').forEach(btn => {
@@ -753,6 +920,9 @@ function displayMessages() {
         return;
     }
     
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
+    
     // Sort by date (newest first) and read status
     messages.sort((a, b) => {
         if (a.read !== b.read) return a.read ? 1 : -1;
@@ -770,8 +940,10 @@ function displayMessages() {
             </div>
             <p class="message-preview">${message.message}</p>
         `;
-        messagesContainer.appendChild(messageElement);
+        fragment.appendChild(messageElement);
     });
+    
+    messagesContainer.appendChild(fragment);
     
     // Add event listeners to messages
     document.querySelectorAll('.message-item').forEach(item => {
@@ -866,16 +1038,48 @@ function saveManagerData(formData) {
     return true;
 }
 
-// Download statement as Excel file
-function downloadStatement() {
-    const currentYear = new Date().getFullYear();
-    const yearlyOrders = currentOrders.filter(order => 
-        order.status === 'completed' && 
-        new Date(order.timestamp).getFullYear() === currentYear
-    );
+// Show statement selection modal
+function showStatementModal() {
+    if (statementModal) {
+        statementModal.classList.add('active');
+    }
+}
+
+// Download statement as Excel file based on selection
+function downloadStatement(statementType) {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth();
     
-    if (yearlyOrders.length === 0) {
-        showToast('No completed orders for the current year', 'error');
+    let filteredOrders = [];
+    let fileName = '';
+    let sheetName = '';
+    let title = '';
+    
+    if (statementType === 'monthly') {
+        // Get first and last day of current month
+        const firstDay = new Date(currentYear, currentMonth, 1);
+        const lastDay = new Date(currentYear, currentMonth + 1, 0);
+        
+        filteredOrders = orderManager.getOrdersByDateRange(firstDay, lastDay);
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = monthNames[currentMonth];
+        fileName = `M&T_Statement_${monthName}_${currentYear}`;
+        sheetName = `Statement_${monthName}_${currentYear}`;
+        title = `M&T Restaurant - Monthly Statement - ${monthName} ${currentYear}`;
+    } else {
+        // Get first and last day of current year
+        const firstDay = new Date(currentYear, 0, 1);
+        const lastDay = new Date(currentYear, 11, 31);
+        
+        filteredOrders = orderManager.getOrdersByDateRange(firstDay, lastDay);
+        fileName = `M&T_Statement_${currentYear}`;
+        sheetName = `Statement_${currentYear}`;
+        title = `M&T Restaurant - Annual Statement - ${currentYear}`;
+    }
+    
+    if (filteredOrders.length === 0) {
+        showToast(`No completed orders for the selected period`, 'error');
         return;
     }
     
@@ -884,18 +1088,20 @@ function downloadStatement() {
     
     // Summary sheet
     const summaryData = [
-        ["M&T Restaurant - Annual Statement"],
-        [`Year: ${currentYear}`],
+        [title],
+        statementType === 'monthly' ? 
+            [`Month: ${currentMonth + 1}/${currentYear}`] : 
+            [`Year: ${currentYear}`],
         [],
         ["Summary"],
-        ["Total Completed Orders", yearlyStats.orders],
-        ["Total Revenue", `R${yearlyStats.revenue.toFixed(2)}`],
+        ["Total Completed Orders", filteredOrders.length],
+        ["Total Revenue", `R${filteredOrders.reduce((sum, order) => sum + (order.total || 0), 0).toFixed(2)}`],
         [],
         ["Order Details"]
     ];
     
     // Order details
-    const orderDetails = yearlyOrders.map(order => [
+    const orderDetails = filteredOrders.map(order => [
         order.timestamp ? formatDate(order.timestamp) : 'Unknown',
         order.orderId || 'Unknown',
         `R${(order.total || 0).toFixed(2)}`
@@ -914,12 +1120,12 @@ function downloadStatement() {
     ];
     worksheet['!cols'] = colWidths;
     
-    XLSX.utils.book_append_sheet(workbook, worksheet, `Statement_${currentYear}`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
     
     // Generate and download Excel file
-    XLSX.writeFile(workbook, `M&T_Statement_${currentYear}.xlsx`);
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
     
-    showToast(`Statement downloaded for ${currentYear}`);
+    showToast(`${statementType === 'monthly' ? 'Monthly' : 'Annual'} statement downloaded`);
 }
 
 // Show confirm modal
@@ -1198,6 +1404,33 @@ if (confirmModal) confirmModal.addEventListener('click', (e) => {
     }
 });
 
+// Statement modal functionality
+if (closeStatementModal) closeStatementModal.addEventListener('click', () => {
+    if (statementModal) statementModal.classList.remove('active');
+});
+
+if (cancelStatement) cancelStatement.addEventListener('click', () => {
+    if (statementModal) statementModal.classList.remove('active');
+});
+
+if (confirmStatement) confirmStatement.addEventListener('click', () => {
+    const type = statementType ? statementType.value : 'monthly';
+    downloadStatement(type);
+    if (statementModal) statementModal.classList.remove('active');
+});
+
+// Close statement modal when clicking outside
+if (statementModal) statementModal.addEventListener('click', (e) => {
+    if (e.target === statementModal) {
+        statementModal.classList.remove('active');
+    }
+});
+
+// Download statement button - show modal
+if (downloadStatementBtn) {
+    downloadStatementBtn.addEventListener('click', showStatementModal);
+}
+
 // PIN modal functionality
 if (closePinModal) closePinModal.addEventListener('click', () => {
     if (pinModal) pinModal.classList.remove('active');
@@ -1229,9 +1462,6 @@ if (pinModal) pinModal.addEventListener('click', (e) => {
     }
 });
 
-// Download statement button
-if (downloadStatementBtn) downloadStatementBtn.addEventListener('click', downloadStatement);
-
 // Close modals with escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1250,6 +1480,9 @@ document.addEventListener('keydown', (e) => {
         if (pinModal && pinModal.classList.contains('active')) {
             pinModal.classList.remove('active');
             currentOrderForPin = null;
+        }
+        if (statementModal && statementModal.classList.contains('active')) {
+            statementModal.classList.remove('active');
         }
     }
 });
@@ -1299,20 +1532,30 @@ window.addEventListener('hashchange', () => {
     }
 });
 
-// Listen for real-time updates
+// Performance-optimized event listeners for real-time updates
+let orderUpdateDebounce = null;
 window.addEventListener('ordersUpdated', function() {
-    loadOrders();
-    updateDashboardStats();
-    if (document.getElementById('orders').classList.contains('active')) {
-        displayAllOrders(currentFilterStatus);
-    }
+    if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
+    
+    orderUpdateDebounce = setTimeout(() => {
+        loadOrders();
+        updateDashboardStats();
+        if (document.getElementById('orders').classList.contains('active')) {
+            displayAllOrders(currentFilterStatus);
+        }
+    }, 500);
 });
 
+let messageUpdateDebounce = null;
 window.addEventListener('messagesUpdated', function() {
-    messages = safeStorage.getJSON('contactMessages') || [];
-    if (document.getElementById('messages').classList.contains('active')) {
-        displayMessages();
-    }
+    if (messageUpdateDebounce) clearTimeout(messageUpdateDebounce);
+    
+    messageUpdateDebounce = setTimeout(() => {
+        messages = safeStorage.getJSON('contactMessages') || [];
+        if (document.getElementById('messages').classList.contains('active')) {
+            displayMessages();
+        }
+    }, 500);
 });
 
 // Initial check and resize listener

@@ -86,6 +86,16 @@
                             <div class="stat-label">Total completed orders</div>
                         </div>
                         <div class="stat-card">
+                            <h3>Monthly Revenue</h3>
+                            <div class="stat-number" id="monthRevenue">R0</div>
+                            <div class="stat-label">Current month only</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Monthly Orders</h3>
+                            <div class="stat-number" id="monthOrders">0</div>
+                            <div class="stat-label">Current month only</div>
+                        </div>
+                        <div class="stat-card">
                             <h3>This Year's Revenue</h3>
                             <div class="stat-number" id="yearRevenue">R0</div>
                             <div class="stat-label">Current year only</div>
@@ -94,8 +104,8 @@
 
                     <!-- Download Statement -->
                     <div class="download-section">
-                        <h3>Annual Statement</h3>
-                        <p>Download complete order data for the current year</p>
+                        <h3>Download Statement</h3>
+                        <p>Download complete order data for monthly or annual reports</p>
                         <button class="download-btn" id="downloadStatementBtn">Download Statement</button>
                     </div>
                 </div>
@@ -246,6 +256,33 @@
                                 <button type="submit" class="save-btn" id="saveItemBtn">Save Item</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statement Selection Modal -->
+            <div class="statement-modal" id="statementModal">
+                <div class="statement-modal-content">
+                    <div class="statement-modal-header">
+                        <h3>Download Statement</h3>
+                        <button class="close-statement-modal" id="closeStatementModal">&times;</button>
+                    </div>
+                    <div class="statement-modal-body">
+                        <div class="form-group">
+                            <label for="statementType">Select Statement Type</label>
+                            <select id="statementType">
+                                <option value="monthly">Monthly Statement</option>
+                                <option value="yearly">Annual Statement</option>
+                            </select>
+                        </div>
+                        <p style="text-align: left; color: #666; font-size: 0.9rem; margin-top: 10px;">
+                            Monthly: Current month's completed orders<br>
+                            Annual: Current year's completed orders
+                        </p>
+                    </div>
+                    <div class="statement-modal-footer">
+                        <button type="button" class="cancel-btn" id="cancelStatement">Cancel</button>
+                        <button type="button" class="save-btn" id="confirmStatement">Download</button>
                     </div>
                 </div>
             </div>

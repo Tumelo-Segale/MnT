@@ -66,6 +66,112 @@
     }
 })();
 
+// Performance-optimized Order Manager
+class OrderManager {
+    constructor() {
+        this.orders = [];
+        this.orderMap = new Map();
+        this.userOrderMap = new Map(); // Maps user email to their orders
+        this.initialized = false;
+    }
+    
+    init(orders) {
+        this.orders = orders || [];
+        this.orderMap.clear();
+        this.userOrderMap.clear();
+        
+        this.orders.forEach(order => {
+            if (order.id) {
+                this.orderMap.set(order.id, order);
+                
+                // Index by user email for faster user-specific queries
+                if (order.userEmail) {
+                    if (!this.userOrderMap.has(order.userEmail)) {
+                        this.userOrderMap.set(order.userEmail, []);
+                    }
+                    this.userOrderMap.get(order.userEmail).push(order);
+                }
+            }
+        });
+        this.initialized = true;
+    }
+    
+    addOrder(order) {
+        if (!order.id) order.id = Date.now();
+        this.orders.unshift(order); // Add to beginning for newest first
+        this.orderMap.set(order.id, order);
+        
+        // Update user index
+        if (order.userEmail) {
+            if (!this.userOrderMap.has(order.userEmail)) {
+                this.userOrderMap.set(order.userEmail, []);
+            }
+            this.userOrderMap.get(order.userEmail).unshift(order);
+        }
+        
+        // Performance: Keep only last 5,000 orders in memory
+        if (this.orders.length > 5000) {
+            const removed = this.orders.pop();
+            if (removed.id) {
+                this.orderMap.delete(removed.id);
+                
+                // Remove from user index
+                if (removed.userEmail) {
+                    const userOrders = this.userOrderMap.get(removed.userEmail);
+                    if (userOrders) {
+                        const index = userOrders.findIndex(o => o.id === removed.id);
+                        if (index > -1) userOrders.splice(index, 1);
+                        if (userOrders.length === 0) {
+                            this.userOrderMap.delete(removed.userEmail);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    getOrder(id) {
+        return this.orderMap.get(id);
+    }
+    
+    getUserOrders(email) {
+        return this.userOrderMap.get(email) || [];
+    }
+    
+    getOrdersByStatus(status) {
+        // Use caching for status-based queries
+        if (this.statusCache && this.statusCache.status === status && 
+            Date.now() - this.statusCache.timestamp < 5000) {
+            return this.statusCache.orders;
+        }
+        
+        const orders = this.orders.filter(order => order.status === status);
+        
+        this.statusCache = {
+            status: status,
+            orders: orders,
+            timestamp: Date.now()
+        };
+        
+        return orders;
+    }
+    
+    updateOrderStatus(id, status) {
+        const order = this.orderMap.get(id);
+        if (order) {
+            order.status = status;
+            
+            // Invalidate status cache
+            this.statusCache = null;
+            
+            return true;
+        }
+        return false;
+    }
+}
+
+const orderManager = new OrderManager();
+
 // Safe localStorage wrapper functions
 const safeStorage = {
     getItem: function(key) {
@@ -196,6 +302,13 @@ let currentUser = safeStorage.getJSON('currentUser') || null;
 let orders = safeStorage.getJSON('orders') || [];
 let menuItems = safeStorage.getJSON('menuItems') || [];
 let contactMessages = safeStorage.getJSON('contactMessages') || [];
+
+// Performance optimization for order processing
+const ORDER_PROCESSING = {
+    MAX_ORDERS_PER_BATCH: 100,
+    BATCH_INTERVAL: 60000, // 1 minute
+    lastProcessTime: 0
+};
 
 // Initialize default data if not exists
 function initializeDefaultData() {
@@ -359,7 +472,7 @@ function checkUserTypeAndRedirect() {
     return false;
 }
 
-// Display orders in the orders section
+// Display orders in the orders section (optimized)
 function displayOrders() {
     if (!ordersContainer) return;
     
@@ -373,7 +486,7 @@ function displayOrders() {
         return;
     }
     
-    const userOrders = Array.isArray(orders) ? orders.filter(order => order.userEmail === currentUser.email) : [];
+    const userOrders = orderManager.getUserOrders(currentUser.email);
     
     if (userOrders.length === 0) {
         ordersContainer.innerHTML = `
@@ -387,14 +500,13 @@ function displayOrders() {
     
     ordersContainer.innerHTML = '';
     
-    // Sort orders by date (newest first)
-    userOrders.sort((a, b) => {
-        const dateA = a.timestamp ? new Date(a.timestamp) : new Date(0);
-        const dateB = b.timestamp ? new Date(b.timestamp) : new Date(0);
-        return dateB - dateA;
-    });
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
     
-    userOrders.forEach(order => {
+    // Limit to 50 most recent orders for performance
+    const displayOrders = userOrders.slice(0, 50);
+    
+    displayOrders.forEach(order => {
         const statusClass = getStatusClass(order.status);
         const orderElement = document.createElement('div');
         orderElement.className = 'order-item';
@@ -410,20 +522,30 @@ function displayOrders() {
             </div>
             <button class="view-order-btn" data-order-id="${order.id}">View Details</button>
         `;
-        ordersContainer.appendChild(orderElement);
+        fragment.appendChild(orderElement);
     });
+    
+    ordersContainer.appendChild(fragment);
     
     // Add event listeners to view order buttons
     document.querySelectorAll('.view-order-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const orderId = btn.dataset.orderId;
-            const order = userOrders.find(o => o.id && o.id.toString() === orderId);
+            const orderId = parseInt(btn.dataset.orderId);
+            const order = orderManager.getOrder(orderId);
             if (order) {
                 showOrderDetails(order);
             }
         });
     });
+    
+    // Show message if more orders exist
+    if (userOrders.length > 50) {
+        const message = document.createElement('div');
+        message.className = 'empty-orders';
+        message.innerHTML = `<p>Showing 50 most recent orders. Use search for older orders.</p>`;
+        ordersContainer.appendChild(message);
+    }
 }
 
 // Show order details in modal
@@ -497,7 +619,7 @@ function updateContactForm() {
     }
 }
 
-// Display menu items
+// Display menu items (optimized)
 function displayMenuItems() {
     const mealsContainer = document.querySelector('.menu-category.meals');
     const drinksContainer = document.querySelector('.menu-category.drinks');
@@ -510,6 +632,10 @@ function displayMenuItems() {
     
     // Filter active menu items (only those with active: true)
     const activeMenuItems = Array.isArray(menuItems) ? menuItems.filter(item => item.active === true) : [];
+    
+    // Use document fragments for better performance
+    const mealsFragment = document.createDocumentFragment();
+    const drinksFragment = document.createDocumentFragment();
     
     // Display meals
     const meals = activeMenuItems.filter(item => item.category === 'meals');
@@ -527,8 +653,9 @@ function displayMenuItems() {
                 <span class="price">R ${(item.price || 0).toFixed(2)}</span>
                 <button class="add-to-cart">Add to Cart</button>
             `;
-            mealsContainer.appendChild(menuItemElement);
+            mealsFragment.appendChild(menuItemElement);
         });
+        mealsContainer.appendChild(mealsFragment);
     }
     
     // Display drinks
@@ -547,8 +674,9 @@ function displayMenuItems() {
                 <span class="price">R ${(item.price || 0).toFixed(2)}</span>
                 <button class="add-to-cart">Add to Cart</button>
             `;
-            drinksContainer.appendChild(menuItemElement);
+            drinksFragment.appendChild(menuItemElement);
         });
+        drinksContainer.appendChild(drinksFragment);
     }
     
     // Add event listeners to new add to cart buttons
@@ -1084,6 +1212,8 @@ function updateCart() {
     if (cart.length === 0) {
         cartItems.innerHTML = '<div class="empty-cart">Your cart is empty</div>';
     } else {
+        const fragment = document.createDocumentFragment();
+        
         cart.forEach(item => {
             const itemElement = document.createElement('div');
             itemElement.className = 'cart-item';
@@ -1099,8 +1229,10 @@ function updateCart() {
                     <button class="remove-item" data-item="${item.name}">&times;</button>
                 </div>
             `;
-            cartItems.appendChild(itemElement);
+            fragment.appendChild(itemElement);
         });
+        
+        cartItems.appendChild(fragment);
         
         // Add event listeners to new buttons
         document.querySelectorAll('.decrease').forEach(btn => {
@@ -1202,6 +1334,7 @@ function processPayment() {
     handler.openIframe();
 }
 
+// Performance-optimized order saving
 function saveOrder() {
     if (cart.length === 0) return;
     
@@ -1216,15 +1349,22 @@ function saveOrder() {
         status: 'pending'
     };
     
-    if (!Array.isArray(orders)) {
-        orders = [];
+    // Add to order manager
+    orderManager.addOrder(order);
+    
+    // Update main orders array
+    orders.unshift(order);
+    
+    // Save to localStorage (debounced)
+    if (!saveOrdersTimeout) {
+        saveOrdersTimeout = setTimeout(() => {
+            safeStorage.setJSON('orders', orders);
+            saveOrdersTimeout = null;
+        }, 1000);
     }
     
-    orders.unshift(order);
-    safeStorage.setJSON('orders', orders);
-    
     // Display updated orders
-    if (document.getElementById('orders')?.classList.contains('active')) {
+    if (document.getElementById('orders')?.classList.contains('active') && currentUser) {
         displayOrders();
     }
     
@@ -1232,6 +1372,8 @@ function saveOrder() {
     const event = new Event('ordersUpdated');
     window.dispatchEvent(event);
 }
+
+let saveOrdersTimeout = null;
 
 // Save contact message
 function saveContactMessage(name, email, message) {
@@ -1294,6 +1436,9 @@ function handleInitialLoad() {
     menuItems = safeStorage.getJSON('menuItems') || [];
     orders = safeStorage.getJSON('orders') || [];
     contactMessages = safeStorage.getJSON('contactMessages') || [];
+    
+    // Initialize order manager
+    orderManager.init(orders);
     
     updateNavigation();
     updateCart();
@@ -1616,22 +1761,35 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Listen for real-time updates from manager
+// Performance-optimized event listeners for real-time updates
+let orderUpdateDebounce = null;
 window.addEventListener('ordersUpdated', function() {
-    // Reload orders when manager updates them
-    orders = safeStorage.getJSON('orders') || [];
-    if (document.getElementById('orders')?.classList.contains('active') && currentUser) {
-        displayOrders();
-        showToast('Order status updated!', 'success');
-    }
+    // Debounce order updates to prevent excessive processing
+    if (orderUpdateDebounce) clearTimeout(orderUpdateDebounce);
+    
+    orderUpdateDebounce = setTimeout(() => {
+        // Reload orders when manager updates them
+        orders = safeStorage.getJSON('orders') || [];
+        orderManager.init(orders);
+        
+        if (document.getElementById('orders')?.classList.contains('active') && currentUser) {
+            displayOrders();
+            showToast('Order status updated!', 'success');
+        }
+    }, 500);
 });
 
+let menuUpdateDebounce = null;
 window.addEventListener('menuItemsUpdated', function() {
-    // Reload menu items when manager updates them
-    menuItems = safeStorage.getJSON('menuItems') || [];
-    if (document.getElementById('menu')?.classList.contains('active')) {
-        displayMenuItems();
-    }
+    if (menuUpdateDebounce) clearTimeout(menuUpdateDebounce);
+    
+    menuUpdateDebounce = setTimeout(() => {
+        // Reload menu items when manager updates them
+        menuItems = safeStorage.getJSON('menuItems') || [];
+        if (document.getElementById('menu')?.classList.contains('active')) {
+            displayMenuItems();
+        }
+    }, 500);
 });
 
 // Initialize page on load
@@ -1670,3 +1828,15 @@ if (typeof PaystackPop === 'undefined') {
     };
     document.head.appendChild(paystackScript);
 }
+
+// Brand name search optimization - Ensure platform appears when searching "mnt" or "mnt chaneng"
+document.addEventListener('DOMContentLoaded', function() {
+    // Set page title with brand keywords
+    document.title = 'M&T';
+    
+    // Add meta keywords for search engines
+    const metaKeywords = document.createElement('meta');
+    metaKeywords.name = 'keywords';
+    metaKeywords.content = 'M&T, MNT, Chaneng, restaurant, food, meals, burgers, drinks, South Africa, takeaway, dine-in';
+    document.head.appendChild(metaKeywords);
+});
