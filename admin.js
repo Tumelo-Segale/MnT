@@ -28,7 +28,6 @@ const sections = document.querySelectorAll('.page-section');
 const logoutLink = document.getElementById('logoutLink');
 
 // Dashboard elements
-const totalRevenue = document.getElementById('totalRevenue');
 const completedOrders = document.getElementById('completedOrders');
 const totalProfit = document.getElementById('totalProfit');
 const yearRevenue = document.getElementById('yearRevenue');
@@ -728,27 +727,35 @@ if (confirmModal) confirmModal.addEventListener('click', (e) => {
     }
 });
 
-// Statement modal functionality
-if (closeStatementModal) closeStatementModal.addEventListener('click', () => {
-    if (statementModal) statementModal.classList.remove('active');
-});
+// Statement modal functionality - FIXED: Using correct event listeners
+if (closeStatementModal) {
+    closeStatementModal.addEventListener('click', () => {
+        if (statementModal) statementModal.classList.remove('active');
+    });
+}
 
-if (cancelStatement) cancelStatement.addEventListener('click', () => {
-    if (statementModal) statementModal.classList.remove('active');
-});
+if (cancelStatement) {
+    cancelStatement.addEventListener('click', () => {
+        if (statementModal) statementModal.classList.remove('active');
+    });
+}
 
-if (confirmStatement) confirmStatement.addEventListener('click', () => {
-    const type = statementType ? statementType.value : 'yearly';
-    downloadStatement(type);
-    if (statementModal) statementModal.classList.remove('active');
-});
+if (confirmStatement) {
+    confirmStatement.addEventListener('click', () => {
+        const type = statementType ? statementType.value : 'yearly';
+        downloadStatement(type);
+        if (statementModal) statementModal.classList.remove('active');
+    });
+}
 
 // Close statement modal when clicking outside
-if (statementModal) statementModal.addEventListener('click', (e) => {
-    if (e.target === statementModal) {
-        statementModal.classList.remove('active');
-    }
-});
+if (statementModal) {
+    statementModal.addEventListener('click', (e) => {
+        if (e.target === statementModal) {
+            statementModal.classList.remove('active');
+        }
+    });
+}
 
 // Handle window resize for desktop warning
 function checkDevice() {

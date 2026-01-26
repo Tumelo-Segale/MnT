@@ -76,6 +76,16 @@
                             <div class="stat-number" id="yearRevenue">R0</div>
                             <div class="stat-label">Current year only</div>
                         </div>
+                        <div class="stat-card">
+                            <h3>Monthly Revenue</h3>
+                            <div class="stat-number" id="monthRevenue">R0</div>
+                            <div class="stat-label">Current month only</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Monthly Orders</h3>
+                            <div class="stat-number" id="monthOrders">0</div>
+                            <div class="stat-label">Current month only</div>
+                        </div>
                     </div>
 
                     <!-- Download Statement -->
@@ -158,6 +168,36 @@
                     <div class="confirm-modal-footer">
                         <button type="button" class="cancel-confirm-btn" id="cancelConfirm">Cancel</button>
                         <button type="button" class="delete-btn" id="confirmAction">Logout</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statement Selection Modal for Admin -->
+            <div class="confirm-modal" id="statementModal">
+                <div class="confirm-modal-content">
+                    <div class="confirm-modal-header">
+                        <h3>Download Statement</h3>
+                        <button class="close-confirm-modal" id="closeStatementModal">&times;</button>
+                    </div>
+                    <div class="confirm-modal-body">
+                        <div class="form-group" style="text-align: left;">
+                            <label for="statementType"
+                                style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Select
+                                Statement Type</label>
+                            <select id="statementType"
+                                style="width: 100%; padding: 12px; border: 1px solid #b22222; border-radius: 4px; font-size: 1rem; font-family: inherit;">
+                                <option value="monthly">Monthly Statement</option>
+                                <option value="yearly">Annual Statement</option>
+                            </select>
+                        </div>
+                        <p style="text-align: left; color: #666; font-size: 0.9rem; margin-top: 10px;">
+                            Monthly: Current month's completed orders with 5% profit calculation<br>
+                            Annual: Current year's completed orders with 5% profit calculation
+                        </p>
+                    </div>
+                    <div class="confirm-modal-footer">
+                        <button type="button" class="cancel-confirm-btn" id="cancelStatement">Cancel</button>
+                        <button type="button" class="delete-btn" id="confirmStatement">Download</button>
                     </div>
                 </div>
             </div>
