@@ -60,22 +60,68 @@ const statementType = document.getElementById('statementType');
 // Toast element
 const toast = document.getElementById('toast');
 
+// Safe localStorage wrapper
+const safeStorage = {
+    getItem: function(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            console.error('Error getting from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setItem: function(key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            console.error('Error setting to localStorage:', e);
+        }
+    },
+    
+    removeItem: function(key) {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {
+            console.error('Error removing from localStorage:', e);
+        }
+    },
+    
+    getJSON: function(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (e) {
+            console.error('Error parsing JSON from localStorage:', e);
+            return null;
+        }
+    },
+    
+    setJSON: function(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error('Error stringifying JSON to localStorage:', e);
+        }
+    }
+};
+
 // State
-let adminData = JSON.parse(localStorage.getItem('adminData')) || {
+let adminData = safeStorage.getJSON('adminData') || {
     email: 'admin@admin.com',
     password: 'admin123',
     name: 'Tumelo Segale'
 };
 
 let allOrders = [];
-let yearlyStats = JSON.parse(localStorage.getItem('yearlyStats')) || {
+let yearlyStats = safeStorage.getJSON('yearlyStats') || {
     year: new Date().getFullYear(),
     revenue: 0,
     orders: 0,
     profit: 0
 };
 
-let monthlyStats = JSON.parse(localStorage.getItem('monthlyStats')) || {
+let monthlyStats = safeStorage.getJSON('monthlyStats') || {
     month: new Date().getMonth(),
     year: new Date().getFullYear(),
     revenue: 0,
@@ -147,52 +193,6 @@ class OrderManager {
 }
 
 const orderManager = new OrderManager();
-
-// Safe localStorage wrapper
-const safeStorage = {
-    getItem: function(key) {
-        try {
-            return localStorage.getItem(key);
-        } catch (e) {
-            console.error('Error getting from localStorage:', e);
-            return null;
-        }
-    },
-    
-    setItem: function(key, value) {
-        try {
-            localStorage.setItem(key, value);
-        } catch (e) {
-            console.error('Error setting to localStorage:', e);
-        }
-    },
-    
-    removeItem: function(key) {
-        try {
-            localStorage.removeItem(key);
-        } catch (e) {
-            console.error('Error removing from localStorage:', e);
-        }
-    },
-    
-    getJSON: function(key) {
-        try {
-            const item = localStorage.getItem(key);
-            return item ? JSON.parse(item) : null;
-        } catch (e) {
-            console.error('Error parsing JSON from localStorage:', e);
-            return null;
-        }
-    },
-    
-    setJSON: function(key, value) {
-        try {
-            localStorage.setItem(key, JSON.stringify(value));
-        } catch (e) {
-            console.error('Error stringifying JSON to localStorage:', e);
-        }
-    }
-};
 
 // Performance-optimized statistics calculation
 class StatsCalculator {
@@ -487,7 +487,7 @@ function showStatementModal() {
 }
 
 // Download statement as Excel file based on selection
-function downloadStatement(statementType) {
+function downloadStatement(statementTypeValue) {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
@@ -497,7 +497,7 @@ function downloadStatement(statementType) {
     let sheetName = '';
     let title = '';
     
-    if (statementType === 'monthly') {
+    if (statementTypeValue === 'monthly') {
         filteredOrders = orderManager.getOrdersByMonth(currentYear, currentMonth);
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const monthName = monthNames[currentMonth];
@@ -522,7 +522,7 @@ function downloadStatement(statementType) {
     // Summary sheet
     const summaryData = [
         [title],
-        statementType === 'monthly' ? 
+        statementTypeValue === 'monthly' ? 
             [`Month: ${currentMonth + 1}/${currentYear}`] : 
             [`Year: ${currentYear}`],
         [],
@@ -564,7 +564,7 @@ function downloadStatement(statementType) {
     // Generate and download Excel file
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
     
-    showToast(`${statementType === 'monthly' ? 'Monthly' : 'Annual'} statement downloaded`);
+    showToast(`${statementTypeValue === 'monthly' ? 'Monthly' : 'Annual'} statement downloaded`);
 }
 
 // Show confirm modal for logout
@@ -727,7 +727,7 @@ if (confirmModal) confirmModal.addEventListener('click', (e) => {
     }
 });
 
-// Statement modal functionality - FIXED: Using correct event listeners
+// Statement modal functionality
 if (closeStatementModal) {
     closeStatementModal.addEventListener('click', () => {
         if (statementModal) statementModal.classList.remove('active');
@@ -819,3 +819,11 @@ window.addEventListener('ordersUpdated', function() {
 
 // Initial check and resize listener
 window.addEventListener('resize', checkDevice);
+
+// Logout link event listener
+if (logoutLink) {
+    logoutLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        showLogoutConfirmModal();
+    });
+}

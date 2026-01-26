@@ -1046,7 +1046,7 @@ function showStatementModal() {
 }
 
 // Download statement as Excel file based on selection
-function downloadStatement(statementType) {
+function downloadStatement(statementTypeValue) {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
@@ -1056,7 +1056,7 @@ function downloadStatement(statementType) {
     let sheetName = '';
     let title = '';
     
-    if (statementType === 'monthly') {
+    if (statementTypeValue === 'monthly') {
         // Get first and last day of current month
         const firstDay = new Date(currentYear, currentMonth, 1);
         const lastDay = new Date(currentYear, currentMonth + 1, 0);
@@ -1089,7 +1089,7 @@ function downloadStatement(statementType) {
     // Summary sheet
     const summaryData = [
         [title],
-        statementType === 'monthly' ? 
+        statementTypeValue === 'monthly' ? 
             [`Month: ${currentMonth + 1}/${currentYear}`] : 
             [`Year: ${currentYear}`],
         [],
@@ -1125,7 +1125,7 @@ function downloadStatement(statementType) {
     // Generate and download Excel file
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
     
-    showToast(`${statementType === 'monthly' ? 'Monthly' : 'Annual'} statement downloaded`);
+    showToast(`${statementTypeValue === 'monthly' ? 'Monthly' : 'Annual'} statement downloaded`);
 }
 
 // Show confirm modal
@@ -1134,6 +1134,11 @@ function showConfirmModal(action, data, message) {
     currentActionData = data;
     if (confirmMessage) confirmMessage.textContent = message;
     if (confirmModal) confirmModal.classList.add('active');
+    
+    // Set up confirm action
+    if (confirmAction) {
+        confirmAction.onclick = handleConfirmedAction;
+    }
 }
 
 // Handle confirmed action
@@ -1394,8 +1399,6 @@ if (closeConfirmModal) closeConfirmModal.addEventListener('click', () => {
 if (cancelConfirm) cancelConfirm.addEventListener('click', () => {
     if (confirmModal) confirmModal.classList.remove('active');
 });
-
-if (confirmAction) confirmAction.addEventListener('click', handleConfirmedAction);
 
 // Close confirm modal when clicking outside
 if (confirmModal) confirmModal.addEventListener('click', (e) => {

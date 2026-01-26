@@ -786,9 +786,11 @@ function updateNavigation() {
         if (isLoggedIn) {
             loginLogoutLink.textContent = 'Logout';
             loginLogoutLink.setAttribute('href', '#logout');
+            loginLogoutLink.classList.add('logout-link');
         } else {
             loginLogoutLink.textContent = 'Login';
             loginLogoutLink.setAttribute('href', '#login');
+            loginLogoutLink.classList.remove('logout-link');
         }
     }
 }
@@ -1839,4 +1841,14 @@ document.addEventListener('DOMContentLoaded', function() {
     metaKeywords.name = 'keywords';
     metaKeywords.content = 'M&T, MNT, Chaneng, restaurant, food, meals, burgers, drinks, South Africa, takeaway, dine-in';
     document.head.appendChild(metaKeywords);
+});
+
+// Add event listener for logout link in sidebar
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('logout-link') || 
+        (e.target.closest('.logout-link'))) {
+        e.preventDefault();
+        showLogoutConfirmModal();
+        closeSidebar();
+    }
 });
